@@ -1,50 +1,50 @@
 
-# INSTÄLLNINGAR
+### SETTINGS
 
 # debug
-debug_unused_paths = True # visar vilka förbindelser som inte använts av en finished path
-debug_central_zones = False # visar vilka zoner som är mest och minst centralt belägna
-debug_show_zone_points = True # visar zonernas poäng
-debug_show_artipoints = True # visar articulation points
-debug_show_random_path = True # visar en slumpmässig pågående rutt efter varje steg i processen
-debug_print_zone_data = False # visar information om zonerna i excelformat
+debug_unused_paths = True # shows all connections that weren't used by any finished path
+debug_central_zones = False # shows what zones are the most and least central
+debug_show_zone_points = True
+debug_show_artipoints = True # shows articulation points
+debug_show_random_path = True # shows a random active path after every process step
+debug_print_zone_data = False # shows zone information in excel format (tab-separated)
 
-# start- och slutzon
+# start and end zone
 start = "k-klassrum"
 end = "k-gymnasiet"
 
-# vilken algoritm (bruteforce, quickbrute)
-algorithm = "quickbrute"
+# choice of algorithm (bruteforce, quickbrute) (currently does nothing)
+algorithm = "bruteforce"
 
-# zoner du inte kan eller vill ta
+# blacklist certain zones
 blacklist = []
-# om ovan istället är en lista på de enda zoner du kan eller vill ta
+# convert above to a whitelist
 whitelist = False
 
-# turfhastighet i m/min
+# your turfing speed (m/min), used to convert distances to time
 speed = 64
 
-# turf-användarnamn
+# turf username
 username = "icicle"
 
-# namn på backupfil
+# backup file name (*.pk)
 dumpname = "turf"
 
-# lista på zoner
+# list of all zones
 zlist = ["campingpiren", "surfview", "nösnäsån", "gulzon", "bathview", "nösnäsbacken", "hallernazon", "kozon",
          "genomskogen", "sneezenose", "dragkamp", "inklämdpågräs", "solgårdsstig", "husarrondell", "movedwindmill",
          "kvarnskogen", "stenryttare", "kvarntäppan", "trädväg", "liteskogbara", "hasselbacke", "frispel", "tullaull",
          "yttreucklums", "ucklumcykel", "kringelikrok", "norumskyrka", "jansvy", "bakomängen", "torpzone", "sköntgrönt",
          "motfurufjäll", "gamlahallerna", "odlamedcykel"]
 
-# lista på korsningszoner
+# list of crossing zones (k for "korsning")
 klist = ["k-klassrum", "k-nösnäs", "k-gymnasiet", "k-backen", "k-ucklum", "k-hallerna", "k-solgård", "k-kristinedal",
          "k-camping", "k-kvarnberg", "k-skogsbryn", "k-älvhem", "k-strandnorum", "k-tuvull", "k-kyrkenorum"]
 
-# articulation points som håller samman tre+ block
+# articulation points connected to 3+ blocks (not detected by the algorithm)
 arti3points = ["nösnäsån", "k-camping"]
 
-# förbindelser mellan zoner i formatet ["zon1", "zon2", (längd i meter)]
+# connections between zones as ["zone 1", "zone 2", (length in meters)]
 connections = [
     ["campingpiren", "k-camping", 370],
     ["surfview", "k-camping", 280],
@@ -119,7 +119,11 @@ connections = [
 
 
 
-# här nere börjar själva ruttgenereringsprocessen
+
+
+
+### PREPARE DATA
+
 import time, requests, pickle#rick
 from datetime import datetime
 if debug_show_random_path == True:
@@ -127,9 +131,9 @@ if debug_show_random_path == True:
 maxdistance = 0
 if debug_print_zone_data == False:
     if algorithm == "bruteforce":
-        maxdistance = speed * int(input("Tid i minuter (max 120):\n> "))
+        maxdistance = speed * int(input("Time in minutes (max 120):\n> "))
     else:
-        maxdistance = speed * int(input("Tid i minuter:\n> "))
+        maxdistance = speed * int(input("Time in minutes:\n> "))
 time_at_start = time.time()
 round_hours_left = 0
 has_connection = True
@@ -140,25 +144,25 @@ backup_bad = False
 def str2time(s):
     return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S%z").timestamp()
 
-# rund-info
+# round info
 try:
     rounds = requests.get("http://api.turfgame.com/v4/rounds").json()
-    for month in rounds: # loopa tills aktiv runda hittats
+    for month in rounds: # loop until the current round is found
         start_time = str2time(month["start"])
         if start_time > time.time():
             break
     round_hours_left = (start_time - time.time()) / 3600
-except requests.exceptions.ConnectionError: # get wifi anywhere you go
+except requests.exceptions.ConnectionError: # no wifi?
     has_connection = False
 
 try:
     with open(dumpname + ".pk", "rb") as file:
         dump = pickle.load(file)
     if time.time() - dump[1] >= 3600 * 24:
-        backup_old = True # om mer än en dag har gått sedan föregående request
+        backup_old = True # if the backup is older than 24 hours
     for zone in zlist:
         if zone not in dump[0]:
-            backup_bad = True # om inte alla zoner finns i backup
+            backup_bad = True # if not all zones exist in the backup
 except FileNotFoundError:
     has_backup = False
 
@@ -166,14 +170,14 @@ if debug_print_zone_data == True:
     print("name\tage\tpotential days\tpts on take\tpts per hour\tpts total\ttake age\trevisit pts\tneutral pts")
     for zone in zlist:
         line = [zone]
-        while True:  # går man över en request i sekunden ger api:n garbage istället
+        while True:
             try:
                 zone_data = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zone}]).json()[0]
                 break
             except KeyError:
                 pass
         hours_existed = (time.time() - str2time(zone_data["dateCreated"])) / 3600
-        potential_hours = min(hours_existed / zone_data["totalTakeovers"], round_hours_left)  # antal timmar innan zonen förloras
+        potential_hours = min(hours_existed / zone_data["totalTakeovers"], round_hours_left)
         line.append(int(hours_existed / 24))
         line.append(round(potential_hours / 24, 1))
         line.append(int(zone_data["takeoverPoints"]))
@@ -181,7 +185,7 @@ if debug_print_zone_data == True:
         line.append(int(zone_data["takeoverPoints"] + potential_hours * zone_data["pointsPerHour"]))
 
         try:
-            if zone_data["currentOwner"]["name"] == username:  # currentOwner är en själv - revisit-poäng om för över 23 timmar sedan
+            if zone_data["currentOwner"]["name"] == username:
                 hours_since_taken = (time.time() - str2time(zone_data["dateLastTaken"])) / 3600
                 line.append(int(hours_since_taken / 24))
                 if hours_since_taken >= 23:
@@ -192,7 +196,7 @@ if debug_print_zone_data == True:
                 line.append("")
                 line.append("")
             line.append("")
-        except KeyError:  # ingen currentOwner - blir neutralbonus istället
+        except KeyError:
             line.append("")
             line.append("")
             line.append(50)
@@ -204,7 +208,7 @@ zonepoints = {}
 zone_data = {}
 if has_connection:
     if not backup_old and not backup_bad and has_backup:
-        print("Laddar backupfil")
+        print("Loading backup file")
         with open(dumpname + ".pk", "rb") as file:
             dump = pickle.load(file)
         zonepoints = dump[0]
@@ -212,48 +216,42 @@ if has_connection:
             zonepoints[zone] = 0
     else:
         if backup_old:
-            print("Backupfil för gammal")
+            print("Backup too old")
         elif backup_bad:
-            print("Ingen giltig backupfil hittad")
+            print("Backup is incomplete")
         else:
-            print("Ingen backupfil hittad")
+            print("No backup file found")
         for zone in zlist:
-            print("Skickar efter data... (" + str(zlist.index(zone) + 1) + "/" + str(len(zlist)) + ")")
+            print("Getting zone data... (" + str(zlist.index(zone) + 1) + "/" + str(len(zlist)) + ")")
             if (whitelist == False and zone not in blacklist) or (whitelist == True and zone in blacklist):
-                while True:  # går man över en request i sekunden ger api:n garbage istället
+                while True: # if you go over one request per second the api gives garbage instead
                     try:
                         zone_data = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zone}]).json()[0]
                         break
                     except KeyError:
                         pass
                 hours_existed = (time.time() - str2time(zone_data["dateCreated"])) / 3600
-                potential_hours = min(hours_existed / zone_data["totalTakeovers"], round_hours_left)  # antal timmar innan zonen förloras
+                potential_hours = min(hours_existed / zone_data["totalTakeovers"], round_hours_left) # average hours before the zone is lost
                 zonepoints[zone] = int(zone_data["takeoverPoints"] + potential_hours * zone_data["pointsPerHour"])
 
                 try:
-                    if zone_data["currentOwner"]["name"] == username:  # currentOwner är en själv - revisit-poäng om för över 23 timmar sedan
+                    if zone_data["currentOwner"]["name"] == username: # if currentOwner is yourself - revisit points if over 23 hours ago
                         hours_since_taken = (time.time() - str2time(zone_data["dateLastTaken"])) / 3600
                         if hours_since_taken > 23:
                             zonepoints[zone] = int(zone_data["takeoverPoints"] / 2)
                         else:
                             zonepoints[zone] = 0
-                except KeyError:  # ingen currentOwner - blir neutralbonus istället
+                except KeyError: # no currentOwner - gives neutral bonus instead
                     zonepoints[zone] += 50
             else:
                 zonepoints[zone] = 0
-        for zone in klist:  # korsningar är ju inte zoner
+        for zone in klist: # crossings don't give points
             zonepoints[zone] = 0
         with open(dumpname + ".pk", "wb") as file:
             pickle.dump([zonepoints, time.time()], file)
 else:
     if has_backup:
-        if not backup_bad:
-            if not backup_old:
-                print("Ingen anslutning, laddar backupfil")
-            else:
-                print("Ingen anslutning, laddar gammal backupfil")
-        else:
-            print("Ingen anslutning, laddar ogiltig backupfil")
+        print("No connection, loading backup file")
         with open(dumpname + ".pk", "rb") as file:
             dump = pickle.load(file)
         zonepoints = dump[0]
@@ -263,27 +261,28 @@ else:
             if zone not in zonepoints:
                 zonepoints[zone] = 0
     else:
-        quit(print("Ingen anslutning, ingen backupfil hittad"))
+        quit(print("No connection, no backup file found"))
 
-# samla alla zoner
+# collect all zones (and their connections)
 zones = {}
 for zone in zonepoints:
     zones[zone] = []
 for con in connections:
-    zones[con[0]].append([con[1], con[2]])
-    zones[con[1]].append([con[0], con[2]])
+    zones[con[0]].append((con[1], con[2]))
+    zones[con[1]].append((con[0], con[2]))
 
-# räknar ut den snabbaste rutten från varje zon till varje annan zon
+# contains the fastest path from every zone to every other zone
 zonedistance = {}
 zonepathfromto = {}
 endpaths = []
 for endzone in zonepoints:
     if zonepoints[endzone] != 0 or endzone == start or endzone == end:
+        # sub-algorithm, calculates the fastest path from "endzone" to every other zone
         endzonedistance = {endzone: 0}
         endzonepathto = {endzone: [endzone]}
         for connection in zones[endzone]:
             endpaths.append([connection[1], connection[0]])
-        while True: # för varje loop, väljer den kortaste rutten och förlänger den
+        while True: # for every loop, the shortest path is chosen and extended
             endpaths.sort(key = lambda x:x[0])
             endpath = endpaths[0]
             if endpath[-1] not in endzonedistance:
@@ -295,11 +294,11 @@ for endzone in zonepoints:
             endpaths.pop(0)
             if endpaths == []:
                 break
+        # collects the information in the big dictionaries
         zonedistance[endzone] = endzonedistance
         zonepathfromto[endzone] = endzonepathto
 
-# räknar ut alla articulation points, en.wikipedia.org/wiki/Biconnected_component
-# haha, jag stal den
+# finds all articulation points, en.wikipedia.org/wiki/Biconnected_component
 artipoints = []
 visited = []
 depth = {}
@@ -321,14 +320,14 @@ def extend(zon, dept):
         elif zon not in parent or child != parent[zon]:
             low[zon] = min(low[zon], depth[child])
 extend(start, 0)
-extend(end, 0) # extend med två olika zoner ifall en av dem är en articulation point
-if artipoints.count(start) == 1: # startzonen räknar alltid sig själv av någon anledning
+extend(end, 0) # run the algorithm with two different zones in case one of them is an articulation point
+if artipoints.count(start) == 1: # the starting zone always counts itself for some reason
     artipoints.remove(start)
 artipoints = list(dict.fromkeys(artipoints))
 if debug_show_artipoints == True:
     print(artipoints)
 
-# debug-grejer
+# debug stuff
 if debug_central_zones == True:
     tl = []
     for startzone in zonedistance:
@@ -340,20 +339,26 @@ if debug_central_zones == True:
     print("\nMest centrala zon: " + tl[0][1] + "\nMest isolerade zon: " + tl[-1][1] + "\n")
 if debug_show_zone_points == True:
     print(dict(sorted(zonepoints.items(), key=lambda x: x[1], reverse=True)))
-if maxdistance == 0: # ingen idé att ens påbörja loopen om detta är fallet
+
+
+if maxdistance == 0: # no reason to even start the loop if this is the case
     quit()
-
-
-
-# annorlunda startrutt om man startar på en poänggivande zon
+# the starting path is different if the starting zone gives points
 paths = [[0, 0, 1, 0, start]] if zonepoints[start] == 0 else [[0, zonepoints[start], 1, 0, start]]
 
-# den stora genereringsloopen
+
+
+
+
+
+### PROCESS
+
 print("\nUppstart tog " + str(round(time.time() - time_at_start, 2)) + " sekunder\n")
 time_at_start = time.time()
-# en rutt är uppbyggd som så: id: [sträcka, rutt-poäng, antal zoner sedan den senaste poänggivande, dessas sträcka, zoner...]
+# a path is defined as: 
+# [path distance, path points, zones since the last point giving one, the distance between these zones, zone 0, zone 1, zone 2...]
 finishedpaths = []
-largestnum = 0 # färdiga rutter accepteras bara om de har mer än den hittills bästa färdiga ruttens poäng
+largestnum = 0 # finished paths are only accepted if they have the most points out of all finished paths so far
 step = 1
 
 while True:
@@ -361,7 +366,7 @@ while True:
     for path in paths:
         lastzone = path[-1]
         lastlastzone = path[-2]
-        for connection in zones[lastzone]: # där connection har formatet [zon, avstånd]
+        for newzone, newdistance in zones[lastzone]:
             points = path[1]
             conseczones = path[2]
             consecdist = path[3]
@@ -370,35 +375,32 @@ while True:
             newdistance = connection[1]
             distance = path[0] + newdistance
 
-            # nu följer: lite optimiseringar av "algoritmen"!
-            # om dessa händelser inträffar finns det garanterat en annan, bättre rutt någonstans i processen, och rutten avbryts därför
-            if maxdistance - distance < zonedistance[end][newzone]: # om den omöjligt kan avsluta rutten utan att överskrida tidsgränsen
+            # and now, some optimizations!
+            # if one of these situations happen it means that there exists another, better path, and this path is removed
+            if maxdistance - distance < zonedistance[end][newzone]: # if it can't be finished without exceeding the time limit
                 continue
-            if zonepoints[lastzone] == 0 or lastzone in path[:-1]:
-                if newzone == lastlastzone: # om den går till en ej poänggivande zon och sedan tillbaka
-                    continue
-            if newzone == lastcapturedzone: # om den gör en runda enbart på ej poänggivande zoner
+            if newzone == lastcapturedzone: # if it returns to a zone without visiting any point-giving zones
                 continue
             if zonepoints[newzone] != 0 and newzone not in path:
-                if consecdist + newdistance > zonedistance[lastcapturedzone][newzone]: # om den inte tagit den snabbaste rutten till den nya zonen
+                if consecdist + newdistance > zonedistance[lastcapturedzone][newzone]: # if it hasn't taken the fastest path to the new zone
                     continue
             if newzone in path and newzone != end:
-                if path.count(newzone) > 1: # om den varit på en zon tre gånger
-                    if newzone not in arti3points:
+                if path.count(newzone) > 1: # if a zone has been visited three times
+                    if newzone not in arti3points: # (unless it might have been necessary)
                         continue
-                if path[5] != newzone: # om den inte återvänder till en zon via förbindelsen den lämnade zonen med (alltså, en loop)
+                if path[5] != newzone: # if it doesn't return to a zone via the connection it left it with
                     if newzone not in artipoints:
                         reversepath = path[::-1]
                         if reversepath[reversepath.index(newzone) - 1] != lastzone:
                             continue
-            if (lastzone, newzone) in zip(path[4:], path[5:]): # om den använder samma förbindelse åt samma håll två gånger
+            if (lastzone, newzone) in zip(path[4:], path[5:]): # if it uses the same connection in the same direction twice
                 continue
 
-            if zonepoints[newzone] != 0 and newzone not in path: # om zonen ger poäng
+            if zonepoints[newzone] != 0 and newzone not in path: # point giving
                 points += zonepoints[newzone]
                 conseczones = 1
                 consecdist = 0
-            else: # om zonen inte gör det
+            else: # not point giving
                 conseczones += 1
                 consecdist += newdistance
             toadd.append([distance, points, conseczones, consecdist] + path[4:] + [newzone])
@@ -407,12 +409,12 @@ while True:
             finishedpaths.append(path)
 
     paths = [path for path in toadd]
-    if paths == []: # om alla rutter är avslutade
+    if paths == []: # if all paths are finished
         break
     if debug_show_random_path:
         print(random.choice(paths))
 
-    # tar bort identiska rutter
+    # removes identical paths
     if algorithm == "quickbrutez":
         dupecheck = []
         todelete = []
@@ -454,19 +456,17 @@ while True:
         for n in todelete:
             del paths[n]
 
-    print("Vid steg " + str(step) + " finns " + str(len(paths)) + " pågående rutter och " + str(len(finishedpaths)) + " färdiga")
+    print("At step " + str(step) + " there were " + str(len(paths)) + " active paths and " + str(len(finishedpaths)) + " finished")
     step += 1
 if len(finishedpaths) == 0:
-    quit(print("\nInga möjliga rutter hittade"))
+    quit(print("\nNo possible paths found"))
 
-# renskrivning av de färdiga rutterna
+# clean up the finished paths
 finishedpaths.sort(key = lambda x:x[1], reverse = True)
 paths = []
 for path in finishedpaths:
-    if path[1] >= finishedpaths[0][1] * 0.8:
-        paths.append(path[:2]) # conseczones och consecdist tas bort
-        for zone in path[4:]:
-            paths[-1].append(zone)
+    if path[1] >= finishedpaths[0][1] * 0.8: # removes really short finished paths
+        paths.append(path[:2] + path[4:]) # conseczones and consecdist removed
     else:
         break
 
@@ -488,7 +488,7 @@ if debug_unused_paths == True:
     print("\n" + str(unuseds))
 
 
-# kollar efter rutter som praktiskt sett är identiska
+# checks for practically identical paths
 dupecheck = []
 todelete = []
 c = 0
@@ -504,20 +504,22 @@ todelete.sort(reverse = True)
 for n in todelete:
     paths.pop(n)
 
-# en sista sortering
+# one last sort!
 paths.sort(key = lambda x:x[1], reverse = True)
-print("\nAlla rutter:")
-if len(paths) > 1: # skriver ut alla andra acceptabla rutter
+
+# writes all other acceptable paths
+print("\nAll paths:")
+if len(paths) > 1: 
     for path in paths:
-        result = str(round(path[1], 1)) + " poäng, " + str(int(path[0] / speed)) + " min: "
+        result = str(round(path[1], 1)) + " points, " + str(int(path[0] / speed)) + " min: "
         for zone in path[2:]:
             if zone[:2] != "k-":
                 result += zone.upper() + "-"
         print(result[:-1])
     print()
 
-# skriv ut resultatet
-print("Bästa rutt:")
+# write the result
+print("Best path:")
 best = paths[0].copy()
 zone_count = 0
 path_str = ""
@@ -527,5 +529,5 @@ for zone in best[2:]:
         path_str += zone.upper() + "-"
         zone_count += 1
     c += 1
-result = str(round(best[1], 1)) + " poäng, " + str(zone_count) + " st, " + str(int(best[0] / speed)) + " min: " + path_str
-print(result[:-1] + "\n\n" + str(best) + "\n\nProcessen tog " + str(round(time.time() - time_at_start, 2)) + " sekunder")
+result = str(round(best[1], 1)) + " points, " + str(zone_count) + " zones, " + str(int(best[0] / speed)) + " min: " + path_str
+print(result[:-1] + "\n\n" + str(best) + "\n\nThe process took " + str(round(time.time() - time_at_start, 2)) + " seconds")
