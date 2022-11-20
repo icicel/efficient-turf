@@ -124,16 +124,12 @@ connections = [
 
 ### PREPARE DATA
 
-import time, requests, pickle#rick
+import time, requests, random, pickle#rick
 from datetime import datetime
-if debug_show_random_path == True:
-    import random
-maxdistance = 0
-if debug_print_zone_data == False:
-    if algorithm == "bruteforce":
-        maxdistance = speed * int(input("Time in minutes (max 120):\n> "))
-    else:
-        maxdistance = speed * int(input("Time in minutes:\n> "))
+if debug_print_zone_data:
+    maxdistance = 0
+else:
+    maxdistance = speed * int(input("Time in minutes:\n> "))
 time_at_start = time.time()
 round_hours_left = 0
 has_connection = True
@@ -343,8 +339,8 @@ if debug_show_zone_points == True:
 
 if maxdistance == 0: # no reason to even start the loop if this is the case
     quit()
-# the starting path is different if the starting zone gives points
-paths = [[0, 0, 1, 0, start]] if zonepoints[start] == 0 else [[0, zonepoints[start], 1, 0, start]]
+# initialize paths! let's go!
+paths = [[0, zonepoints[start], start, 0, start]]
 
 
 
@@ -356,117 +352,67 @@ paths = [[0, 0, 1, 0, start]] if zonepoints[start] == 0 else [[0, zonepoints[sta
 print("\nUppstart tog " + str(round(time.time() - time_at_start, 2)) + " sekunder\n")
 time_at_start = time.time()
 # a path is defined as: 
-# [path distance, path points, zones since the last point giving one, the distance between these zones, zone 0, zone 1, zone 2...]
-finishedpaths = []
-largestnum = 0 # finished paths are only accepted if they have the most points out of all finished paths so far
+# [path distance, path points, last point giving zone visited, distance gone since it was visited, zone 0, zone 1, zone 2...]
+finished_paths = []
+best_points = 0 # finished paths are only accepted if they have the most points out of all finished paths so far
 step = 1
 
 while True:
     toadd = []
     for path in paths:
-        lastzone = path[-1]
-        lastlastzone = path[-2]
-        for newzone, newdistance in zones[lastzone]:
-            points = path[1]
-            conseczones = path[2]
-            consecdist = path[3]
-            lastcapturedzone = path[-conseczones]
-            newzone = connection[0]
-            newdistance = connection[1]
-            distance = path[0] + newdistance
+        last_zone = path[-1]
+        points = path[1]
+        last_captured_zone = path[2]
+        last_captured_distance = path[3]
+        for new_zone, new_distance in zones[last_zone]:
+            distance = path[0] + new_distance
+            new_zone_gives_points = zonepoints[new_zone] != 0 and new_zone not in path
 
             # and now, some optimizations!
-            # if one of these situations happen it means that there exists another, better path, and this path is removed
-            if maxdistance - distance < zonedistance[end][newzone]: # if it can't be finished without exceeding the time limit
+            # if one of these situations happen it means that there (probably) exists another, better path, and this path is removed
+
+            if maxdistance - distance < zonedistance[end][new_zone]: # if it can't be finished without exceeding the time limit
                 continue
-            if newzone == lastcapturedzone: # if it returns to a zone without visiting any point-giving zones
+            if new_zone == last_captured_zone: # if it returns to a zone without visiting any point-giving zones
                 continue
-            if zonepoints[newzone] != 0 and newzone not in path:
-                if consecdist + newdistance > zonedistance[lastcapturedzone][newzone]: # if it hasn't taken the fastest path to the new zone
+            if new_zone_gives_points and last_captured_distance + new_distance > zonedistance[last_captured_zone][new_zone]: # if it hasn't taken the fastest path to the new zone
+                continue
+            used_connections = zip(path[4:], path[5:])
+            if (last_zone, new_zone) in used_connections: # if it uses the same connection in the same direction twice
+                continue
+            if new_zone in path and new_zone != end: # if it returns to a zone
+                if path.count(new_zone) > 1 and new_zone not in arti3points: # if the zone has been visited three times
                     continue
-            if newzone in path and newzone != end:
-                if path.count(newzone) > 1: # if a zone has been visited three times
-                    if newzone not in arti3points: # (unless it might have been necessary)
+                if path[5] != new_zone and new_zone not in artipoints: # if it doesn't return to the zone via the connection it left it with
+                    if (new_zone, last_zone) not in used_connections:
                         continue
-                if path[5] != newzone: # if it doesn't return to a zone via the connection it left it with
-                    if newzone not in artipoints:
-                        reversepath = path[::-1]
-                        if reversepath[reversepath.index(newzone) - 1] != lastzone:
-                            continue
-            if (lastzone, newzone) in zip(path[4:], path[5:]): # if it uses the same connection in the same direction twice
-                continue
 
-            if zonepoints[newzone] != 0 and newzone not in path: # point giving
-                points += zonepoints[newzone]
-                conseczones = 1
-                consecdist = 0
-            else: # not point giving
-                conseczones += 1
-                consecdist += newdistance
-            toadd.append([distance, points, conseczones, consecdist] + path[4:] + [newzone])
-        if lastzone == end and path[1] >= largestnum:
-            largestnum = path[1]
-            finishedpaths.append(path)
+            if new_zone_gives_points:
+                toadd.append([distance, points + zonepoints[new_zone], new_zone, 0] + path[4:] + [new_zone])
+            else:
+                toadd.append([distance, points, last_captured_zone, last_captured_distance + new_distance] + path[4:] + [new_zone])
+        if last_zone == end and points >= best_points:
+            best_points = points
+            finished_paths.append(path)
 
-    paths = [path for path in toadd]
+    del paths
+    paths = toadd
     if paths == []: # if all paths are finished
         break
     if debug_show_random_path:
         print(random.choice(paths))
 
-    # removes identical paths
-    if algorithm == "quickbrutez":
-        dupecheck = []
-        todelete = []
-        c = 0
-        for path in paths:
-            dupe = set(path[4:])
-            if dupe in dupecheck:
-                todelete.append(c)
-            else:
-                dupecheck.append(dupe)
-            c += 1
-        todelete.sort(reverse = True)
-        for n in todelete:
-            del paths[n]
-    
-    if algorithm == "quickbrutex":
-        dupecheck = []
-        dupechecki = []
-        dupes = {}
-        todelete = []
-        c = 0
-        for path in paths:
-            dupe = set(path[4:])
-            if dupe in dupecheck:
-                og = dupechecki[dupecheck.index(dupe)]
-                if og in dupes:
-                    dupes[og].append(c)
-                else:
-                    dupes[og] = [c]
-            else:
-                dupecheck.append(dupe)
-                dupechecki.append(c)
-            c += 1
-        for n in dupes:
-            alldupes = dupes[n] + [n]
-            alldupes.remove(min(dupes[n] + [n], key=lambda x:paths[x][0]))
-            todelete.extend(alldupes)
-        todelete.sort(reverse = True)
-        for n in todelete:
-            del paths[n]
-
-    print("At step " + str(step) + " there were " + str(len(paths)) + " active paths and " + str(len(finishedpaths)) + " finished")
+    print("At step " + str(step) + " there were " + str(len(paths)) + " active paths and " + str(len(finished_paths)) + " finished")
     step += 1
-if len(finishedpaths) == 0:
+if len(finished_paths) == 0:
     quit(print("\nNo possible paths found"))
 
 # clean up the finished paths
-finishedpaths.sort(key = lambda x:x[1], reverse = True)
+finished_paths.sort(key = lambda x:x[1], reverse = True)
 paths = []
-for path in finishedpaths:
-    if path[1] >= finishedpaths[0][1] * 0.8: # removes really short finished paths
-        paths.append(path[:2] + path[4:]) # conseczones and consecdist removed
+for path in finished_paths:
+    if path[1] >= finished_paths[0][1] * 0.8: # removes really short finished paths
+        paths.append(path[:2] + path[4:]) # last_captured_zone and last_captured_distance removed
     else:
         break
 
