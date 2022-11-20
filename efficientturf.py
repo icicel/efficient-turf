@@ -2,24 +2,19 @@
 ### SETTINGS
 
 # debug
-debug_unused_paths = True # shows all connections that weren't used by any finished path
+debug_unused_paths = False # shows all connections that weren't used by any finished path
 debug_central_zones = False # shows what zones are the most and least central
-debug_show_zone_points = True
-debug_show_artipoints = True # shows articulation points
-debug_show_random_path = True # shows a random active path after every process step
+debug_show_zone_points = False # shows the zone points dictionary
+debug_show_artipoints = False # shows articulation points and articulation point-related stuff
+debug_show_random_path = False # shows a random active path after every process step
 debug_print_zone_data = False # shows zone information in excel format (tab-separated)
-
-# start and end zone
-start = "k-klassrum"
-end = "k-gymnasiet"
 
 # choice of algorithm (bruteforce, quickbrute) (currently does nothing)
 algorithm = "bruteforce"
 
-# blacklist certain zones
-blacklist = []
-# convert above to a whitelist
-whitelist = False
+# separate python file containing data such as zone names, connections, start_zone/end_zone zone etc.
+# check data_template.py for examples
+data_set = "template"
 
 # your turfing speed (m/min), used to convert distances to time
 speed = 64
@@ -30,92 +25,6 @@ username = "icicle"
 # backup file name (*.pk)
 dumpname = "turf"
 
-# list of all zones
-zlist = ["campingpiren", "surfview", "nösnäsån", "gulzon", "bathview", "nösnäsbacken", "hallernazon", "kozon",
-         "genomskogen", "sneezenose", "dragkamp", "inklämdpågräs", "solgårdsstig", "husarrondell", "movedwindmill",
-         "kvarnskogen", "stenryttare", "kvarntäppan", "trädväg", "liteskogbara", "hasselbacke", "frispel", "tullaull",
-         "yttreucklums", "ucklumcykel", "kringelikrok", "norumskyrka", "jansvy", "bakomängen", "torpzone", "sköntgrönt",
-         "motfurufjäll", "gamlahallerna", "odlamedcykel"]
-
-# list of crossing zones (k for "korsning")
-klist = ["k-klassrum", "k-nösnäs", "k-gymnasiet", "k-backen", "k-ucklum", "k-hallerna", "k-solgård", "k-kristinedal",
-         "k-camping", "k-kvarnberg", "k-skogsbryn", "k-älvhem", "k-strandnorum", "k-tuvull", "k-kyrkenorum"]
-
-# articulation points connected to 3+ blocks (not detected by the algorithm)
-arti3points = ["nösnäsån", "k-camping"]
-
-# connections between zones as ["zone 1", "zone 2", (length in meters)]
-connections = [
-    ["campingpiren", "k-camping", 370],
-    ["surfview", "k-camping", 280],
-    ["k-camping", "nösnäsån", 730],
-    ["nösnäsån", "gulzon", 370],
-    ["gulzon", "bathview", 480],
-    ["nösnäsån", "k-nösnäs", 100],
-    ["k-nösnäs", "nösnäsbacken", 580],
-    ["nösnäsbacken", "hallernazon", 620],
-    ["hallernazon", "k-hallerna", 530],
-    ["k-hallerna", "kozon", 330],
-    ["k-hallerna", "genomskogen", 330],
-    ["k-backen", "genomskogen", 330],
-    ["genomskogen", "sneezenose", 540],
-    ["sneezenose", "nösnäsbacken", 540],
-    ["sneezenose", "k-gymnasiet", 80],
-    ["k-nösnäs", "k-gymnasiet", 430],
-    ["k-gymnasiet", "k-klassrum", 130],
-    ["k-klassrum", "k-backen", 120],
-    ["k-ucklum", "k-gymnasiet", 260],
-    ["k-nösnäs", "k-solgård", 330],
-    ["k-solgård", "dragkamp", 90],
-    ["k-solgård", "inklämdpågräs", 230],
-    ["inklämdpågräs", "solgårdsstig", 310],
-    ["solgårdsstig", "k-kristinedal", 520],
-    ["k-kristinedal", "husarrondell", 150],
-    ["k-kristinedal", "stenryttare", 210],
-    ["inklämdpågräs", "movedwindmill", 450],
-    ["movedwindmill", "k-kvarnberg", 410],
-    ["k-kvarnberg", "k-skogsbryn", 200],
-    ["k-skogsbryn", "kvarnskogen", 200],
-    ["k-skogsbryn", "stenryttare", 150],
-    ["k-skogsbryn", "liteskogbara", 290],
-    ["k-kvarnberg", "kvarntäppan", 230],
-    ["k-kvarnberg", "liteskogbara", 330],
-    ["kvarntäppan", "k-ucklum", 280],
-    ["k-ucklum", "dragkamp", 190],
-    ["kvarntäppan", "trädväg", 330],
-    ["k-ucklum", "trädväg", 470],
-    ["trädväg", "liteskogbara", 550],
-    ["liteskogbara", "hasselbacke", 440],
-    ["trädväg", "hasselbacke", 470],
-    ["trädväg", "k-älvhem", 280],
-    ["k-älvhem", "hasselbacke", 320],
-    ["hasselbacke", "frispel", 260],
-    ["k-älvhem", "frispel", 430],
-    ["frispel", "tullaull", 260],
-    ["k-älvhem", "yttreucklums", 330],
-    ["yttreucklums", "ucklumcykel", 450],
-    ["yttreucklums", "k-backen", 310],
-    ["kringelikrok", "ucklumcykel", 630],
-    ["kringelikrok", "norumskyrka", 450],
-    ["norumskyrka", "kozon", 710],
-    ["yttreucklums", "k-ucklum", 550],
-    ["nösnäsbacken", "k-strandnorum", 540],
-    ["hallernazon", "k-strandnorum", 330],
-    ["k-strandnorum", "jansvy", 390],
-    ["k-strandnorum", "bakomängen", 420],
-    ["jansvy", "bakomängen", 390],
-    ["tullaull", "k-tuvull", 230],
-    ["k-tuvull", "kringelikrok", 310],
-    ["k-tuvull", "torpzone", 530],
-    ["kringelikrok", "k-kyrkenorum", 270],
-    ["k-kyrkenorum", "torpzone", 410],
-    ["k-kyrkenorum", "sköntgrönt", 360],
-    ["norumskyrka", "sköntgrönt", 620],
-    ["sköntgrönt", "motfurufjäll", 360],
-    ["kozon", "gamlahallerna", 590],
-    ["gamlahallerna", "norumskyrka", 670],
-    ["gamlahallerna", "odlamedcykel", 250]
-]
 
 
 
@@ -124,12 +33,13 @@ connections = [
 
 ### PREPARE DATA
 
-import time, requests, random, pickle#rick
+import time, requests, random, importlib, pickle#rick
 from datetime import datetime
 if debug_print_zone_data:
     maxdistance = 0
 else:
     maxdistance = speed * int(input("Time in minutes:\n> "))
+data = importlib.import_module("data_" + data_set)
 time_at_start = time.time()
 round_hours_left = 0
 has_connection = True
@@ -156,7 +66,7 @@ try:
         dump = pickle.load(file)
     if time.time() - dump[1] >= 3600 * 24:
         backup_old = True # if the backup is older than 24 hours
-    for zone in zlist:
+    for zone in data.zlist:
         if zone not in dump[0]:
             backup_bad = True # if not all zones exist in the backup
 except FileNotFoundError:
@@ -164,7 +74,7 @@ except FileNotFoundError:
 
 if debug_print_zone_data == True:
     print("name\tage\tpotential days\tpts on take\tpts per hour\tpts total\ttake age\trevisit pts\tneutral pts")
-    for zone in zlist:
+    for zone in data.zlist:
         line = [zone]
         while True:
             try:
@@ -208,7 +118,7 @@ if has_connection:
         with open(dumpname + ".pk", "rb") as file:
             dump = pickle.load(file)
         zonepoints = dump[0]
-        for zone in klist:
+        for zone in data.klist:
             zonepoints[zone] = 0
     else:
         if backup_old:
@@ -217,9 +127,9 @@ if has_connection:
             print("Backup is incomplete")
         else:
             print("No backup file found")
-        for zone in zlist:
-            print("Getting zone data... (" + str(zlist.index(zone) + 1) + "/" + str(len(zlist)) + ")")
-            if (whitelist == False and zone not in blacklist) or (whitelist == True and zone in blacklist):
+        for zone in data.zlist:
+            print("Getting zone data... (" + str(data.zlist.index(zone) + 1) + "/" + str(len(data.zlist)) + ")")
+            if (data.whitelist == False and zone not in data.blacklist) or (data.whitelist == True and zone in data.blacklist):
                 while True: # if you go over one request per second the api gives garbage instead
                     try:
                         zone_data = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zone}]).json()[0]
@@ -241,7 +151,7 @@ if has_connection:
                     zonepoints[zone] += 50
             else:
                 zonepoints[zone] = 0
-        for zone in klist: # crossings don't give points
+        for zone in data.klist: # crossings don't give points
             zonepoints[zone] = 0
         with open(dumpname + ".pk", "wb") as file:
             pickle.dump([zonepoints, time.time()], file)
@@ -251,9 +161,9 @@ else:
         with open(dumpname + ".pk", "rb") as file:
             dump = pickle.load(file)
         zonepoints = dump[0]
-        for zone in klist:
+        for zone in data.klist:
             zonepoints[zone] = 0
-        for zone in zlist:
+        for zone in data.zlist:
             if zone not in zonepoints:
                 zonepoints[zone] = 0
     else:
@@ -263,7 +173,7 @@ else:
 zones = {}
 for zone in zonepoints:
     zones[zone] = []
-for con in connections:
+for con in data.connections:
     zones[con[0]].append((con[1], con[2]))
     zones[con[1]].append((con[0], con[2]))
 
@@ -272,7 +182,7 @@ zonedistance = {}
 zonepathfromto = {}
 endpaths = []
 for endzone in zonepoints:
-    if zonepoints[endzone] != 0 or endzone == start or endzone == end:
+    if zonepoints[endzone] != 0 or endzone == data.start_zone or endzone == data.end_zone:
         # sub-algorithm, calculates the fastest path from "endzone" to every other zone
         endzonedistance = {endzone: 0}
         endzonepathto = {endzone: [endzone]}
@@ -300,30 +210,49 @@ visited = []
 depth = {}
 low = {}
 parent = {}
-def extend(zon, dept):
-    visited.append(zon)
-    depth[zon] = dept
-    low[zon] = dept
-    for connectio in zones[zon]:
-        child = connectio[0]
+def get_artipoints(zone, d):
+    visited.append(zone)
+    depth[zone] = d
+    low[zone] = d
+    children = 0
+    is_artipoint = False
+    for child, _ in zones[zone]:
         if not child in visited:
-            parent[child] = zon
-            extend(child, dept + 1)
-            if low[child] >= depth[zon]:
-                if zon != end:
-                    artipoints.append(zon)
-            low[zon] = min(low[zon], low[child])
-        elif zon not in parent or child != parent[zon]:
-            low[zon] = min(low[zon], depth[child])
-extend(start, 0)
-extend(end, 0) # run the algorithm with two different zones in case one of them is an articulation point
-if artipoints.count(start) == 1: # the starting zone always counts itself for some reason
-    artipoints.remove(start)
-artipoints = list(dict.fromkeys(artipoints))
-if debug_show_artipoints == True:
-    print(artipoints)
+            parent[child] = zone
+            get_artipoints(child, d + 1)
+            children += 1
+            if low[child] >= depth[zone]:
+                is_artipoint = True
+            low[zone] = min(low[zone], low[child])
+        elif zone not in parent or child != parent[zone]:
+            low[zone] = min(low[zone], depth[child])
+    if (zone in parent and is_artipoint) or (zone not in parent and children > 1):
+        artipoints.append(zone)
+get_artipoints(data.start_zone, 0)
+
+# finds articulation points connected to 3+ blocks specifically
+arti3points = []
+block_amount = {}
+def visit(zone):
+    visited.append(zone)
+    for neighbor, _ in zones[zone]:
+        if neighbor not in visited:
+            visit(neighbor)
+for zone in artipoints:
+    connected_blocks = 0
+    visited = [zone]
+    for neighbor, _ in zones[zone]:
+        if neighbor not in visited:
+            visit(neighbor)
+            connected_blocks += 1
+    if connected_blocks >= 3:
+        arti3points.append(zone)
+    block_amount[zone] = connected_blocks
 
 # debug stuff
+if debug_show_artipoints == True:
+    print("\nArtipoint stuff:")
+    print(artipoints, arti3points, block_amount, sep="\n")
 if debug_central_zones == True:
     tl = []
     for startzone in zonedistance:
@@ -332,15 +261,16 @@ if debug_central_zones == True:
             c += zonedistance[startzone][endzone]
         tl.append([c, startzone])
     tl.sort(key = lambda x:x[0])
-    print("\nMest centrala zon: " + tl[0][1] + "\nMest isolerade zon: " + tl[-1][1] + "\n")
+    print("\nMost central zone: " + tl[0][1] + "\nMost isolated zone: " + tl[-1][1])
 if debug_show_zone_points == True:
+    print("\nZone points:")
     print(dict(sorted(zonepoints.items(), key=lambda x: x[1], reverse=True)))
 
 
-if maxdistance == 0: # no reason to even start the loop if this is the case
+if maxdistance == 0: # no reason to even start_zone the loop if this is the case
     quit()
 # initialize paths! let's go!
-paths = [[0, zonepoints[start], start, 0, start]]
+paths = [[0, zonepoints[data.start_zone], data.start_zone, 0, data.start_zone]]
 
 
 
@@ -349,7 +279,7 @@ paths = [[0, zonepoints[start], start, 0, start]]
 
 ### PROCESS
 
-print("\nUppstart tog " + str(round(time.time() - time_at_start, 2)) + " sekunder\n")
+print("\nStartup took " + str(round(time.time() - time_at_start, 2)) + " seconds\n")
 time_at_start = time.time()
 # a path is defined as: 
 # [path distance, path points, last point giving zone visited, distance gone since it was visited, zone 0, zone 1, zone 2...]
@@ -364,34 +294,34 @@ while True:
         points = path[1]
         last_captured_zone = path[2]
         last_captured_distance = path[3]
+        path_zones = path[4:]
         for new_zone, new_distance in zones[last_zone]:
             distance = path[0] + new_distance
-            new_zone_gives_points = zonepoints[new_zone] != 0 and new_zone not in path
+            new_zone_gives_points = zonepoints[new_zone] != 0 and new_zone not in path_zones
 
             # and now, some optimizations!
             # if one of these situations happen it means that there (probably) exists another, better path, and this path is removed
 
-            if maxdistance - distance < zonedistance[end][new_zone]: # if it can't be finished without exceeding the time limit
+            if maxdistance - distance < zonedistance[data.end_zone][new_zone]: # if it can't be finished without exceeding the time limit
                 continue
             if new_zone == last_captured_zone: # if it returns to a zone without visiting any point-giving zones
                 continue
             if new_zone_gives_points and last_captured_distance + new_distance > zonedistance[last_captured_zone][new_zone]: # if it hasn't taken the fastest path to the new zone
                 continue
-            used_connections = zip(path[4:], path[5:])
+            used_connections = zip(path_zones, path_zones[1:])
             if (last_zone, new_zone) in used_connections: # if it uses the same connection in the same direction twice
                 continue
-            if new_zone in path and new_zone != end: # if it returns to a zone
-                if path.count(new_zone) > 1 and new_zone not in arti3points: # if the zone has been visited three times
+            if new_zone in path_zones and new_zone != data.end_zone: # if it returns to a zone
+                if path_zones.count(new_zone) > 1 and new_zone not in arti3points: # if the zone has been visited three times
                     continue
-                if path[5] != new_zone and new_zone not in artipoints: # if it doesn't return to the zone via the connection it left it with
-                    if (new_zone, last_zone) not in used_connections:
-                        continue
+                if (new_zone, last_zone) not in used_connections and new_zone not in artipoints: # if it doesn't return to the zone via the connection it left it with
+                    continue
 
             if new_zone_gives_points:
-                toadd.append([distance, points + zonepoints[new_zone], new_zone, 0] + path[4:] + [new_zone])
+                toadd.append([distance, points + zonepoints[new_zone], new_zone, 0] + path_zones + [new_zone])
             else:
-                toadd.append([distance, points, last_captured_zone, last_captured_distance + new_distance] + path[4:] + [new_zone])
-        if last_zone == end and points >= best_points:
+                toadd.append([distance, points, last_captured_zone, last_captured_distance + new_distance] + path_zones + [new_zone])
+        if last_zone == data.end_zone and points >= best_points:
             best_points = points
             finished_paths.append(path)
 
@@ -429,9 +359,10 @@ if debug_unused_paths == True:
             pair = [zone, connection[0]]
             pair.sort()
             if pair not in pairs and pair not in unuseds:
-                unuseds.append(pair)
+                unuseds.append(tuple(pair))
     unuseds.sort()
-    print("\n" + str(unuseds))
+    print("\nUnused paths:")
+    print(unuseds)
 
 
 # checks for practically identical paths
@@ -446,12 +377,14 @@ for path in paths:
     else:
         dupecheck.append(dupe)
     c += 1
-todelete.sort(reverse = True)
+todelete.sort(reverse=True)
 for n in todelete:
     paths.pop(n)
 
-# one last sort!
-paths.sort(key = lambda x:x[1], reverse = True)
+# shortest path at the front
+paths.sort(key=lambda x:x[0])
+# path with most points at the front
+paths.sort(key=lambda x:x[1], reverse=True)
 
 # writes all other acceptable paths
 print("\nAll paths:")
@@ -476,4 +409,4 @@ for zone in best[2:]:
         zone_count += 1
     c += 1
 result = str(round(best[1], 1)) + " points, " + str(zone_count) + " zones, " + str(int(best[0] / speed)) + " min: " + path_str
-print(result[:-1] + "\n\n" + str(best) + "\n\nThe process took " + str(round(time.time() - time_at_start, 2)) + " seconds")
+print(result[:-1] + "\n\nTechnical representation:\n" + str(best) + "\n\nThe process took " + str(round(time.time() - time_at_start, 2)) + " seconds")
