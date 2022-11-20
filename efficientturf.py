@@ -129,28 +129,25 @@ if has_connection:
             print("No backup file found")
         for zone in data.zlist:
             print("Getting zone data... (" + str(data.zlist.index(zone) + 1) + "/" + str(len(data.zlist)) + ")")
-            if (data.whitelist == False and zone not in data.blacklist) or (data.whitelist == True and zone in data.blacklist):
-                while True: # if you go over one request per second the api gives garbage instead
-                    try:
-                        zone_data = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zone}]).json()[0]
-                        break
-                    except KeyError:
-                        pass
-                hours_existed = (time.time() - str2time(zone_data["dateCreated"])) / 3600
-                potential_hours = min(hours_existed / zone_data["totalTakeovers"], round_hours_left) # average hours before the zone is lost
-                zonepoints[zone] = int(zone_data["takeoverPoints"] + potential_hours * zone_data["pointsPerHour"])
-
+            while True: # if you go over one request per second the api gives garbage instead
                 try:
-                    if zone_data["currentOwner"]["name"] == username: # if currentOwner is yourself - revisit points if over 23 hours ago
-                        hours_since_taken = (time.time() - str2time(zone_data["dateLastTaken"])) / 3600
-                        if hours_since_taken > 23:
-                            zonepoints[zone] = int(zone_data["takeoverPoints"] / 2)
-                        else:
-                            zonepoints[zone] = 0
-                except KeyError: # no currentOwner - gives neutral bonus instead
-                    zonepoints[zone] += 50
-            else:
-                zonepoints[zone] = 0
+                    zone_data = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zone}]).json()[0]
+                    break
+                except KeyError:
+                    pass
+            hours_existed = (time.time() - str2time(zone_data["dateCreated"])) / 3600
+            potential_hours = min(hours_existed / zone_data["totalTakeovers"], round_hours_left) # average hours before the zone is lost
+            zonepoints[zone] = int(zone_data["takeoverPoints"] + potential_hours * zone_data["pointsPerHour"])
+
+            try:
+                if zone_data["currentOwner"]["name"] == username: # if currentOwner is yourself - revisit points if over 23 hours ago
+                    hours_since_taken = (time.time() - str2time(zone_data["dateLastTaken"])) / 3600
+                    if hours_since_taken > 23:
+                        zonepoints[zone] = int(zone_data["takeoverPoints"] / 2)
+                    else:
+                        zonepoints[zone] = 0
+            except KeyError: # no currentOwner - gives neutral bonus instead
+                zonepoints[zone] += 50
         for zone in data.klist: # crossings don't give points
             zonepoints[zone] = 0
         with open(dumpname + ".pk", "wb") as file:
@@ -171,17 +168,45 @@ else:
 
 # collect all zones (and their connections)
 zones = {}
-for zone in zonepoints:
-    zones[zone] = []
-for con in data.connections:
-    zones[con[0]].append((con[1], con[2]))
-    zones[con[1]].append((con[0], con[2]))
+if data.whitelist:
+    for zone in zonepoints:
+        if zone in data.blacklist:
+            zones[zone] = []
+else:
+    for zone in zonepoints:
+        if zone not in data.blacklist:
+            zones[zone] = []
+for zone1, zone2, length in data.connections:
+    if zone1 in zones and zone2 in zones:
+        zones[zone1].append((zone2, length))
+        zones[zone2].append((zone1, length))
+
+# filter out (kill) zones that can't be reached from start_zone
+if data.blacklist:
+    kill_list = list(zones.keys())
+    def survive(zone):
+        kill_list.remove(zone)
+        for neighbor, _ in zones[zone]:
+            if neighbor in kill_list:
+                survive(neighbor)
+    survive(data.start_zone)
+    if data.end_zone in kill_list:
+        quit(print("\nNo possible paths found"))
+    print("Unreachable zones were deleted: " + ", ".join(kill_list))
+    for zone in list(zones.keys()): # remake zones without these unreachable zones
+        if zone in kill_list:
+            del zones[zone]
+        zones[zone] = []
+    for zone1, zone2, length in data.connections:
+        if zone1 in zones and zone2 in zones:
+            zones[zone1].append((zone2, length))
+            zones[zone2].append((zone1, length))
 
 # contains the fastest path from every zone to every other zone
 zonedistance = {}
 zonepathfromto = {}
 endpaths = []
-for endzone in zonepoints:
+for endzone in zones:
     if zonepoints[endzone] != 0 or endzone == data.start_zone or endzone == data.end_zone:
         # sub-algorithm, calculates the fastest path from "endzone" to every other zone
         endzonedistance = {endzone: 0}
@@ -267,7 +292,7 @@ if debug_show_zone_points == True:
     print(dict(sorted(zonepoints.items(), key=lambda x: x[1], reverse=True)))
 
 
-if maxdistance == 0: # no reason to even start_zone the loop if this is the case
+if maxdistance == 0: # no reason to even start the loop if this is the case
     quit()
 # initialize paths! let's go!
 paths = [[0, zonepoints[data.start_zone], data.start_zone, 0, data.start_zone]]
