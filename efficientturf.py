@@ -2,7 +2,7 @@
 ### SETTINGS
 
 # debug
-debug_unused_paths = False # shows all connections that weren't used by any finished path
+debug_unused_connections = False # shows all connections that weren't used by any finished path
 debug_central_zones = False # shows what zones are the most and least central
 debug_show_zone_points = False # shows the zone points dictionary
 debug_show_artipoints = False # shows articulation points and articulation point-related stuff
@@ -12,7 +12,7 @@ debug_print_zone_data = False # shows zone information in excel format (tab-sepa
 # choice of algorithm (bruteforce, quickbrute) (currently does nothing)
 algorithm = "bruteforce"
 
-# separate python file containing data such as zone names, connections, start_zone/end_zone zone etc.
+# separate file (data_*.py) containing data such as zone names, connections, start_zone/end_zone zone etc.
 # check data_template.py for examples
 data_set = "template"
 
@@ -363,75 +363,73 @@ if len(finished_paths) == 0:
     quit(print("\nNo possible paths found"))
 
 # clean up the finished paths
-finished_paths.sort(key = lambda x:x[1], reverse = True)
-paths = []
+finished_paths.sort(key=lambda x:x[1], reverse=True)
+# remove paths not clearing this threshold
+threshold = finished_paths[0][1] * 0.8
+temp = []
 for path in finished_paths:
-    if path[1] >= finished_paths[0][1] * 0.8: # removes really short finished paths
-        paths.append(path[:2] + path[4:]) # last_captured_zone and last_captured_distance removed
+    if path[1] >= threshold: 
+        temp.append(path[:2] + path[4:]) # last_captured_zone and last_captured_distance removed
     else:
+        finished_paths = temp
         break
 
-if debug_unused_paths == True:
-    pairs = []
-    for path in paths:
-        for pair in list(zip(path[2:], path[3:])):
-            x = list(pair)
-            x.sort()
-            pairs.append(list(x))
-    unuseds = []
-    for zone in zonepoints:
-        for connection in zones[zone]:
-            pair = [zone, connection[0]]
-            pair.sort()
-            if pair not in pairs and pair not in unuseds:
-                unuseds.append(tuple(pair))
-    unuseds.sort()
+if debug_unused_connections == True:
+    # collects all connections that the finished paths use
+    used_connections = set()
+    for path in finished_paths:
+        for connection in zip(path[2:], path[3:]):
+            used_connections.add(set(connection))
+    
+    # gathers all connections not in used_connections
+    unused_connections = []
+    for zone in zones:
+        for neighbor, _ in zones[zone]:
+            connection = {zone, neighbor}
+            if connection not in used_connections and connection not in unused_connections:
+                unused_connections.append(connection)
+    unused_connections = [tuple(x) for x in unused_connections]
+    unused_connections.sort()
     print("\nUnused paths:")
-    print(unuseds)
-
+    print(unused_connections)
 
 # checks for practically identical paths
 dupecheck = []
-todelete = []
-c = 0
-for path in paths:
-    dupe = path[2:]
-    dupe.sort()
+to_delete = []
+for i, path in enumerate(finished_paths):
+    dupe = set(path[2:])
     if dupe in dupecheck:
-        todelete.append(c)
+        to_delete.append(i)
     else:
         dupecheck.append(dupe)
-    c += 1
-todelete.sort(reverse=True)
-for n in todelete:
-    paths.pop(n)
+for n in to_delete[::-1]:
+    finished_paths.pop(n)
 
 # shortest path at the front
-paths.sort(key=lambda x:x[0])
-# path with most points at the front
-paths.sort(key=lambda x:x[1], reverse=True)
+finished_paths.sort(key=lambda x:x[0])
+# path with most points at the front (with ties broken by length because of the above line)
+finished_paths.sort(key=lambda x:x[1], reverse=True)
 
 # writes all other acceptable paths
 print("\nAll paths:")
-if len(paths) > 1: 
-    for path in paths:
-        result = str(round(path[1], 1)) + " points, " + str(int(path[0] / speed)) + " min: "
-        for zone in path[2:]:
-            if zone[:2] != "k-":
-                result += zone.upper() + "-"
-        print(result[:-1])
-    print()
+if len(finished_paths) != 1: 
+    for path in finished_paths:
+        print("{} points, {} min: {}".format(
+            round(path[1], 1),
+            str(int(path[0] / speed)),
+            "-".join([zone.upper() for zone in path[2:] if zone in data.zlist])))
 
 # write the result
-print("Best path:")
-best = paths[0].copy()
-zone_count = 0
-path_str = ""
-c = 2
-for zone in best[2:]:
-    if zone[:2] != "k-" and zone not in best[2:c]:
-        path_str += zone.upper() + "-"
-        zone_count += 1
-    c += 1
-result = str(round(best[1], 1)) + " points, " + str(zone_count) + " zones, " + str(int(best[0] / speed)) + " min: " + path_str
-print(result[:-1] + "\n\nTechnical representation:\n" + str(best) + "\n\nThe process took " + str(round(time.time() - time_at_start, 2)) + " seconds")
+print("\nBest path:")
+best = finished_paths[0]
+best_zones = []
+for i, zone in enumerate(best[2:]):
+    if zone in data.zlist and zone not in best[2:i+2]:
+        best_zones.append(zone.upper())
+print("{} points, {} zones, {} min: {}\n\nTechnical representation:\n{}\n\nThe process took {} seconds".format(
+    str(round(best[1], 1)),
+    str(len(best_zones)),
+    str(int(best[0] / speed)),
+    "-".join(best_zones),
+    str(best),
+    str(round(time.time() - time_at_start, 2))))
