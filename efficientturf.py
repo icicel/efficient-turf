@@ -9,7 +9,7 @@ debug_show_artipoints = False # shows articulation points and articulation point
 debug_show_random_path = False # shows a random active path after every process step
 debug_print_zone_data = False # shows zone information in excel format (tab-separated)
 
-# choice of algorithm (bruteforce, quickbrute) (currently does nothing)
+# choice of algorithm (currently does nothing)
 algorithm = "bruteforce"
 
 # separate file (data_*.py) containing data such as zone names, connections, start_zone/end_zone zone etc.
@@ -31,26 +31,41 @@ dumpname = "turf"
 
 
 
+
 ### PREPARE DATA
 
-import time, requests, random, importlib, pickle#rick
+import time, requests, random, importlib, pickle
 from datetime import datetime
 if debug_print_zone_data:
     maxdistance = 0
 else:
     maxdistance = speed * int(input("Time in minutes:\n> "))
-data = importlib.import_module("data_" + data_set)
 time_at_start = time.time()
-round_hours_left = 0
-has_connection = True
-has_backup = True
-backup_old = False
-backup_bad = False
 
+# import and check validity of data
+try:
+    data = importlib.import_module("data_" + data_set)
+except ModuleNotFoundError:
+    quit(print("ERROR: data_" + data_set + ".py not found"))
+defined_zones = data.zlist + data.clist
+if data.start_zone not in defined_zones:
+    quit(print("ERROR: Start zone is invalid"))
+if data.end_zone not in defined_zones:
+    quit(print("ERROR: End zone is invalid"))
+for zone in data.blacklist:
+    if zone not in defined_zones:
+        print("WARNING: Blacklist contains invalid zone name: " + zone)
+for zone1, zone2, _ in data.connections:
+    if zone1 not in defined_zones:
+        print("WARNING: Connection contains invalid zone name: " + zone1)
+    if zone2 not in defined_zones:
+        print("WARNING: Connection contains invalid zone name: " + zone2)
+
+# converts an ISO8601 time format string to seconds (since epoch, probably? doesn't matter)
 def str2time(s):
     return datetime.strptime(s, "%Y-%m-%dT%H:%M:%S%z").timestamp()
 
-# round info
+# get round info with the turf API (specifically, how many hours are left)
 try:
     rounds = requests.get("http://api.turfgame.com/v4/rounds").json()
     for month in rounds: # loop until the current round is found
@@ -58,30 +73,29 @@ try:
         if start_time > time.time():
             break
     round_hours_left = (start_time - time.time()) / 3600
-except requests.exceptions.ConnectionError: # no wifi?
+    has_connection = True
+except requests.exceptions.ConnectionError: # no wifi :)
     has_connection = False
+    round_hours_left = 1000 # should be big enough to never matter (which is what we want here)
 
-try:
-    with open(dumpname + ".pk", "rb") as file:
-        dump = pickle.load(file)
-    if time.time() - dump[1] >= 3600 * 24:
-        backup_old = True # if the backup is older than 24 hours
-    for zone in data.zlist:
-        if zone not in dump[0]:
-            backup_bad = True # if not all zones exist in the backup
-except FileNotFoundError:
-    has_backup = False
 
-if debug_print_zone_data == True:
+
+
+
+
+
+
+### PREPARE ZONES
+
+# calculate zone points from the turf API (or if no connection, from the backup file)
+if debug_print_zone_data == True: # debug
+    if not has_connection:
+        quit(print("ERROR: Can't print zone data without a connection"))
     print("name\tage\tpotential days\tpts on take\tpts per hour\tpts total\ttake age\trevisit pts\tneutral pts")
-    for zone in data.zlist:
+    zone_datas = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zone} for zone in data.zlist]).json()
+    for i, zone_data in enumerate(zone_datas):
+        zone = data.zlist[i]
         line = [zone]
-        while True:
-            try:
-                zone_data = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zone}]).json()[0]
-                break
-            except KeyError:
-                pass
         hours_existed = (time.time() - str2time(zone_data["dateCreated"])) / 3600
         potential_hours = min(hours_existed / zone_data["totalTakeovers"], round_hours_left)
         line.append(int(hours_existed / 24))
@@ -89,7 +103,6 @@ if debug_print_zone_data == True:
         line.append(int(zone_data["takeoverPoints"]))
         line.append(int(zone_data["pointsPerHour"]))
         line.append(int(zone_data["takeoverPoints"] + potential_hours * zone_data["pointsPerHour"]))
-
         try:
             if zone_data["currentOwner"]["name"] == username:
                 hours_since_taken = (time.time() - str2time(zone_data["dateLastTaken"])) / 3600
@@ -102,78 +115,62 @@ if debug_print_zone_data == True:
                 line.append("")
                 line.append("")
             line.append("")
-        except KeyError:
+        except KeyError: # no currentOwner - gives neutral bonus instead
             line.append("")
             line.append("")
             line.append(50)
         line = [str(x) for x in line]
         print("\t".join(line).replace(".",","))
     quit()
+elif has_connection: # not debug
+    zone_datas = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zone} for zone in data.zlist]).json()
+    zone_points = {}
+    for i, zone_data in enumerate(zone_datas):
+        zone = data.zlist[i]
 
-zonepoints = {}
-zone_data = {}
-if has_connection:
-    if not backup_old and not backup_bad and has_backup:
-        print("Loading backup file")
-        with open(dumpname + ".pk", "rb") as file:
-            dump = pickle.load(file)
-        zonepoints = dump[0]
-        for zone in data.klist:
-            zonepoints[zone] = 0
-    else:
-        if backup_old:
-            print("Backup too old")
-        elif backup_bad:
-            print("Backup is incomplete")
-        else:
-            print("No backup file found")
-        for zone in data.zlist:
-            print("Getting zone data... (" + str(data.zlist.index(zone) + 1) + "/" + str(len(data.zlist)) + ")")
-            while True: # if you go over one request per second the api gives garbage instead
-                try:
-                    zone_data = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zone}]).json()[0]
-                    break
-                except KeyError:
-                    pass
-            hours_existed = (time.time() - str2time(zone_data["dateCreated"])) / 3600
-            potential_hours = min(hours_existed / zone_data["totalTakeovers"], round_hours_left) # average hours before the zone is lost
-            zonepoints[zone] = int(zone_data["takeoverPoints"] + potential_hours * zone_data["pointsPerHour"])
+        hours_existed = (time.time() - str2time(zone_data["dateCreated"])) / 3600
+        potential_hours = min(hours_existed / zone_data["totalTakeovers"], round_hours_left) # average hours before the zone is lost
+        zone_points[zone] = int(zone_data["takeoverPoints"] + potential_hours * zone_data["pointsPerHour"])
+        # if currentOwner is yourself, give revisit points if over 23 hours ago
+        # give neutral points if no currentOwner
+        if "currentOwner" in zone_data and zone_data["currentOwner"]["name"] == username:
+                hours_since_taken = (time.time() - str2time(zone_data["dateLastTaken"])) / 3600
+                if hours_since_taken > 23:
+                    zone_points[zone] = int(zone_data["takeoverPoints"] / 2)
+                else:
+                    zone_points[zone] = 0
+        else: # no currentOwner - gives neutral bonus instead
+            zone_points[zone] += 50
+    for zone in data.clist: # crossings don't give points
+        zone_points[zone] = 0
+    with open(dumpname + ".pk", "wb") as file:
+        pickle.dump(zone_points, file)
 
-            try:
-                if zone_data["currentOwner"]["name"] == username: # if currentOwner is yourself - revisit points if over 23 hours ago
-                    hours_since_taken = (time.time() - str2time(zone_data["dateLastTaken"])) / 3600
-                    if hours_since_taken > 23:
-                        zonepoints[zone] = int(zone_data["takeoverPoints"] / 2)
-                    else:
-                        zonepoints[zone] = 0
-            except KeyError: # no currentOwner - gives neutral bonus instead
-                zonepoints[zone] += 50
-        for zone in data.klist: # crossings don't give points
-            zonepoints[zone] = 0
-        with open(dumpname + ".pk", "wb") as file:
-            pickle.dump([zonepoints, time.time()], file)
+# no connection, use backup file to get zone points instead
 else:
-    if has_backup:
-        print("No connection, loading backup file")
+    try:
         with open(dumpname + ".pk", "rb") as file:
             dump = pickle.load(file)
-        zonepoints = dump[0]
-        for zone in data.klist:
-            zonepoints[zone] = 0
-        for zone in data.zlist:
-            if zone not in zonepoints:
-                zonepoints[zone] = 0
-    else:
-        quit(print("No connection, no backup file found"))
+    except FileNotFoundError:
+        quit(print("ERROR: No connection, no backup file found"))
+    
+    print("WARNING: No connection, loading backup file")
+    with open(dumpname + ".pk", "rb") as file:
+        zone_points = pickle.load(file)
+    for zone in data.clist:
+        zone_points[zone] = 0
+    for zone in data.zlist:
+        if zone not in zone_points:
+            zone_points[zone] = 0
 
 # collect all zones (and their connections)
 zones = {}
 if data.whitelist:
-    for zone in zonepoints:
+    for zone in zone_points:
         if zone in data.blacklist:
             zones[zone] = []
 else:
-    for zone in zonepoints:
+    for zone in zone_points:
         if zone not in data.blacklist:
             zones[zone] = []
 for zone1, zone2, length in data.connections:
@@ -191,7 +188,7 @@ if data.blacklist:
                 survive(neighbor)
     survive(data.start_zone)
     if data.end_zone in kill_list:
-        quit(print("\nNo possible paths found"))
+        quit(print("\nERROR: No possible paths found through non-blacklisted zones"))
     print("Unreachable zones were deleted: " + ", ".join(kill_list))
     for zone in list(zones.keys()): # remake zones without these unreachable zones
         if zone in kill_list:
@@ -202,12 +199,24 @@ if data.blacklist:
             zones[zone1].append((zone2, length))
             zones[zone2].append((zone1, length))
 
-# contains the fastest path from every zone to every other zone
-zonedistance = {}
-zonepathfromto = {}
-endpaths = []
+
+
+
+
+
+
+
+### PRE-CALCULATIONS
+
+# the fastest path from every zone to every other zone
+fastest_path_between = {}
+# the length of that path
+zone_distance_between = {}
+
+# fill out above dictionaries
 for endzone in zones:
-    if zonepoints[endzone] != 0 or endzone == data.start_zone or endzone == data.end_zone:
+    endpaths = []
+    if zone_points[endzone] != 0 or endzone == data.start_zone or endzone == data.end_zone:
         # sub-algorithm, calculates the fastest path from "endzone" to every other zone
         endzonedistance = {endzone: 0}
         endzonepathto = {endzone: [endzone]}
@@ -226,8 +235,8 @@ for endzone in zones:
             if endpaths == []:
                 break
         # collects the information in the big dictionaries
-        zonedistance[endzone] = endzonedistance
-        zonepathfromto[endzone] = endzonepathto
+        zone_distance_between[endzone] = endzonedistance
+        fastest_path_between[endzone] = endzonepathto
 
 # finds all articulation points, en.wikipedia.org/wiki/Biconnected_component
 artipoints = []
@@ -280,22 +289,23 @@ if debug_show_artipoints == True:
     print(artipoints, arti3points, block_amount, sep="\n")
 if debug_central_zones == True:
     tl = []
-    for startzone in zonedistance:
+    for startzone in zone_distance_between:
         c = 0
-        for endzone in zonedistance[startzone]:
-            c += zonedistance[startzone][endzone]
+        for endzone in zone_distance_between[startzone]:
+            c += zone_distance_between[startzone][endzone]
         tl.append([c, startzone])
     tl.sort(key = lambda x:x[0])
     print("\nMost central zone: " + tl[0][1] + "\nMost isolated zone: " + tl[-1][1])
 if debug_show_zone_points == True:
     print("\nZone points:")
-    print(dict(sorted(zonepoints.items(), key=lambda x: x[1], reverse=True)))
-
+    print(dict(sorted(zone_points.items(), key=lambda x: x[1], reverse=True)))
 
 if maxdistance == 0: # no reason to even start the loop if this is the case
-    quit()
+    quit(print("ERROR: Distance is zero, aborting"))
 # initialize paths! let's go!
-paths = [[0, zonepoints[data.start_zone], data.start_zone, 0, data.start_zone]]
+paths = [[0, zone_points[data.start_zone], data.start_zone, 0, data.start_zone]]
+
+
 
 
 
@@ -322,16 +332,16 @@ while True:
         path_zones = path[4:]
         for new_zone, new_distance in zones[last_zone]:
             distance = path[0] + new_distance
-            new_zone_gives_points = zonepoints[new_zone] != 0 and new_zone not in path_zones
+            new_zone_gives_points = zone_points[new_zone] != 0 and new_zone not in path_zones
 
             # and now, some optimizations!
             # if one of these situations happen it means that there (probably) exists another, better path, and this path is removed
 
-            if maxdistance - distance < zonedistance[data.end_zone][new_zone]: # if it can't be finished without exceeding the time limit
+            if maxdistance - distance < zone_distance_between[data.end_zone][new_zone]: # if it can't be finished without exceeding the time limit
                 continue
             if new_zone == last_captured_zone: # if it returns to a zone without visiting any point-giving zones
                 continue
-            if new_zone_gives_points and last_captured_distance + new_distance > zonedistance[last_captured_zone][new_zone]: # if it hasn't taken the fastest path to the new zone
+            if new_zone_gives_points and last_captured_distance + new_distance > zone_distance_between[last_captured_zone][new_zone]: # if it hasn't taken the fastest path to the new zone
                 continue
             used_connections = zip(path_zones, path_zones[1:])
             if (last_zone, new_zone) in used_connections: # if it uses the same connection in the same direction twice
@@ -343,7 +353,7 @@ while True:
                     continue
 
             if new_zone_gives_points:
-                toadd.append([distance, points + zonepoints[new_zone], new_zone, 0] + path_zones + [new_zone])
+                toadd.append([distance, points + zone_points[new_zone], new_zone, 0] + path_zones + [new_zone])
             else:
                 toadd.append([distance, points, last_captured_zone, last_captured_distance + new_distance] + path_zones + [new_zone])
         if last_zone == data.end_zone and points >= best_points:
@@ -360,7 +370,16 @@ while True:
     print("At step " + str(step) + " there were " + str(len(paths)) + " active paths and " + str(len(finished_paths)) + " finished")
     step += 1
 if len(finished_paths) == 0:
-    quit(print("\nNo possible paths found"))
+    quit(print("\nERROR: No possible paths found"))
+
+
+
+
+
+
+
+
+### CLEANUP
 
 # clean up the finished paths
 finished_paths.sort(key=lambda x:x[1], reverse=True)

@@ -7,12 +7,17 @@ zlist = ["campingpiren", "surfview", "nösnäsån", "gulzon", "bathview", "nösn
          "motfurufjäll", "gamlahallerna", "odlamedcykel"]
 
 # list of crossing zones (purely functional zones that don't give points)
-klist = ["k-klassrum", "k-nösnäs", "k-gymnasiet", "k-backen", "k-ucklum", "k-hallerna", "k-solgård", "k-kristinedal",
+clist = ["k-klassrum", "k-nösnäs", "k-gymnasiet", "k-backen", "k-ucklum", "k-hallerna", "k-solgård", "k-kristinedal",
          "k-camping", "k-kvarnberg", "k-skogsbryn", "k-älvhem", "k-strandnorum", "k-tuvull", "k-kyrkenorum"]
 
 # start and end zone
 start_zone = "k-klassrum"
 end_zone = "k-gymnasiet"
+
+# blacklist certain zones (the algorithm can't use them for paths)
+blacklist = []
+# convert above to a whitelist (the algorithm can ONLY use them for paths)
+whitelist = False
 
 # connections between zones as ["zone 1", "zone 2", (length in meters)]
 connections = [
@@ -86,8 +91,3 @@ connections = [
     ("gamlahallerna", "norumskyrka", 670),
     ("gamlahallerna", "odlamedcykel", 250)
 ]
-
-# blacklist certain zones (the algorithm can't use them for paths)
-blacklist = []
-# convert above to a whitelist (the algorithm can ONLY use them for paths)
-whitelist = False
