@@ -236,27 +236,26 @@ zone_distance_between = {}
 # fill out above dictionaries
 for endzone in zones:
     endpaths = []
-    if zone_points[endzone] != 0 or endzone in [start_zone, end_zone]:
-        # sub-algorithm, calculates the fastest path from "endzone" to every other zone
-        endzonedistance = {endzone: 0}
-        endzonepathto = {endzone: [endzone]}
-        for connection in zones[endzone]:
-            endpaths.append([connection[1], connection[0]])
-        while True: # for every loop, the shortest path is chosen and extended
-            endpaths.sort(key = lambda x:x[0])
-            endpath = endpaths[0]
-            if endpath[-1] not in endzonedistance:
-                endzonepathto[endpath[-1]] = [endzone] + endpath[1:]
-                endzonedistance[endpath[-1]] = endpath[0]
-                for connection in zones[endpath[-1]]:
-                    if connection[0] not in endzonedistance:
-                        endpaths.append([endpath[0] + connection[1]] + endpath[1:] + [connection[0]])
-            endpaths.pop(0)
-            if not endpaths:
-                break
-        # collects the information in the big dictionaries
-        zone_distance_between[endzone] = endzonedistance
-        fastest_path_between[endzone] = endzonepathto
+    # sub-algorithm, calculates the fastest path from "endzone" to every other zone
+    endzonedistance = {endzone: 0}
+    endzonepathto = {endzone: [endzone]}
+    for connection in zones[endzone]:
+        endpaths.append([connection[1], connection[0]])
+    while True: # for every loop, the shortest path is chosen and extended
+        endpaths.sort(key = lambda x:x[0])
+        endpath = endpaths[0]
+        if endpath[-1] not in endzonedistance:
+            endzonepathto[endpath[-1]] = [endzone] + endpath[1:]
+            endzonedistance[endpath[-1]] = endpath[0]
+            for connection in zones[endpath[-1]]:
+                if connection[0] not in endzonedistance:
+                    endpaths.append([endpath[0] + connection[1]] + endpath[1:] + [connection[0]])
+        endpaths.pop(0)
+        if not endpaths:
+            break
+    # collects the information in the big dictionaries
+    zone_distance_between[endzone] = endzonedistance
+    fastest_path_between[endzone] = endzonepathto
 
 # finds all articulation points, en.wikipedia.org/wiki/Biconnected_component
 artipoints = []
@@ -341,35 +340,51 @@ time_at_start = time.time()
 finished_paths = []
 best_points = 0 # finished paths are only accepted if they have the most points out of all finished paths so far
 step = 1
+# helper function gets the distance between four zones (minus the distance between zone2 and zone3, not needed for this)
+def distance_between(zone1, zone2, zone3, zone4):
+    return zone_distance_between[zone1][zone2] + zone_distance_between[zone3][zone4]
 
 while True:
     toadd = []
     for path in paths:
         last_zone = path[-1]
+        last2_zone = path[-2]
+        last3_zone = path[-3]
+        old_distance = path[0]
         points = path[1]
         last_captured_zone = path[2]
         last_captured_distance = path[3]
         path_zones = path[4:]
         for new_zone, new_distance in zones[last_zone]:
-            distance = path[0] + new_distance
+            distance = old_distance + new_distance
             new_zone_gives_points = zone_points[new_zone] != 0 and new_zone not in path_zones
 
             # and now, some optimizations!
             # if one of these situations happen it means that there (probably) exists another, better path, and this path is removed
 
-            if maxdistance - distance < zone_distance_between[end_zone][new_zone]: # if it can't be finished without exceeding the time limit
+            # PROBLEM: it can't be finished without exceeding the time limit
+            if maxdistance - distance < zone_distance_between[end_zone][new_zone]:
                 continue
-            if new_zone == last_captured_zone: # if it returns to a zone without visiting any point-giving zones
+            # PROBLEM: it returns to a zone without visiting any point-giving zones
+            if new_zone == last_captured_zone:
                 continue
-            if new_zone_gives_points and last_captured_distance + new_distance > zone_distance_between[last_captured_zone][new_zone]: # if it hasn't taken the fastest path to the new zone
+            # PROBLEM: it hasn't taken the fastest path to the new zone
+            if new_zone_gives_points and last_captured_distance + new_distance > zone_distance_between[last_captured_zone][new_zone]:
                 continue
+            # PROBLEM: it uses the same connection in the same direction twice
             used_connections = zip(path_zones, path_zones[1:])
-            if (last_zone, new_zone) in used_connections: # if it uses the same connection in the same direction twice
+            if (last_zone, new_zone) in used_connections:
                 continue
             if new_zone in path_zones and new_zone != end_zone: # if it returns to a zone
-                if path_zones.count(new_zone) > 1 and new_zone not in arti3points: # if the zone has been visited three times
+                # PROBLEM: the new zone has been visited three times
+                if path_zones.count(new_zone) > 1 and new_zone not in arti3points:
                     continue
-                if (new_zone, last_zone) not in used_connections and new_zone not in artipoints: # if it doesn't return to the zone via the connection it left it with
+                # PROBLEM: it doesn't return to the zone via the connection it left it with
+                if (new_zone, last_zone) not in used_connections and new_zone not in artipoints:
+                    continue
+            if len(path) >= 7: # if it has visited 4+ zones including the new zone
+                # PROBLEM: visiting the last four zones in another order would have been faster
+                if distance_between(last3_zone, last2_zone, last_zone, new_zone) > distance_between(last3_zone, last_zone, last2_zone, new_zone):
                     continue
 
             if new_zone_gives_points:
