@@ -117,7 +117,10 @@ if debug_print_zone_data == True: # debug
         zone = zlist[i]
         line = [zname[zone]]
         hours_existed = (time.time() - str2time(zone_data["dateCreated"])) / 3600
-        potential_hours = min(hours_existed / zone_data["totalTakeovers"], round_hours_left)
+        if zone_data["totalTakeovers"]:
+            potential_hours = min(hours_existed / zone_data["totalTakeovers"], round_hours_left)
+        else:
+            potential_hours = round_hours_left
         line.append(int(hours_existed / 24))
         line.append(round(potential_hours / 24, 1))
         line.append(int(zone_data["takeoverPoints"]))
@@ -135,7 +138,7 @@ if debug_print_zone_data == True: # debug
                 line.append("")
                 line.append("")
             line.append("")
-        except KeyError: # no currentOwner - gives neutral bonus instead
+        except KeyError:
             line.append("")
             line.append("")
             line.append(50)
@@ -149,7 +152,11 @@ elif has_connection: # not debug
         zone = zlist[i]
 
         hours_existed = (time.time() - str2time(zone_data["dateCreated"])) / 3600
-        potential_hours = min(hours_existed / zone_data["totalTakeovers"], round_hours_left) # average hours before the zone is lost
+        # get average hours before the zone is lost
+        if zone_data["totalTakeovers"]:
+            potential_hours = min(hours_existed / zone_data["totalTakeovers"], round_hours_left)
+        else: # zone has never been taken
+            potential_hours = round_hours_left
         zone_points[zone] = int(zone_data["takeoverPoints"] + potential_hours * zone_data["pointsPerHour"])
         # if currentOwner is yourself, give revisit points if over 23 hours ago
         # give neutral points if no currentOwner
