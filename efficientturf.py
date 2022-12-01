@@ -53,26 +53,40 @@ for i, zone in enumerate(data.zlist + data.clist): # generate numerical ids for 
     zname[i] = zone
 zlist = [zid[zone] for zone in data.zlist]
 clist = [zid[zone] for zone in data.clist]
-defined_zones = zlist + clist
-start_zone = zid[data.start_zone]
-end_zone = zid[data.end_zone]
-blacklist = [zid[zone] for zone in data.blacklist]
-whitelist = data.whitelist
-connections = [(zid[z1], zid[z2], d) for z1, z2, d in data.connections]
+defined_zones = data.zlist + data.clist
 
-# check validity
-if start_zone not in defined_zones:
-    quit(print("ERROR: Start zone is invalid"))
-if end_zone not in defined_zones:
-    quit(print("ERROR: End zone is invalid"))
-for zone in blacklist:
-    if zone not in defined_zones:
-        print("WARNING: Blacklist contains invalid zone name: " + zone)
-for zone1, zone2, _ in connections:
+if data.start_zone not in defined_zones:
+    quit(print("ERROR: Start zone not found"))
+start_zone = zid[data.start_zone]
+if data.end_zone not in defined_zones:
+    quit(print("ERROR: End zone not found"))
+end_zone = zid[data.end_zone]
+
+blacklist = []
+if data.is_whitelist: # make sure "blacklist" always refers to a blacklist
+    for zone in data.blacklist:
+        if zone not in defined_zones:
+            quit(print("ERROR: Blacklist contains undefined zone name: " + zone))
+    for zone in defined_zones:
+        if zone not in data.blacklist:
+            blacklist.append(zid[zone])
+    if start_zone in blacklist or end_zone in blacklist:
+        quit(print("ERROR: Whitelist does not contain start and/or end zone"))
+else:
+    for zone in data.blacklist:
+        if zone not in defined_zones:
+            quit(print("ERROR: Blacklist contains undefined zone name: " + zone))
+        if zone == data.start_zone or zone == data.end_zone:
+            quit(print("ERROR: Blacklist contains start or end zone"))
+        blacklist.append(zid[zone])
+
+connections = []
+for zone1, zone2, distance in data.connections:
     if zone1 not in defined_zones:
-        print("WARNING: Connection contains invalid zone name: " + zone1)
+        quit(print("ERROR: Connections contains undefined zone name: " + zone1))
     if zone2 not in defined_zones:
-        print("WARNING: Connection contains invalid zone name: " + zone2)
+        quit(print("ERROR: Connections contains undefined zone name: " + zone2))
+    connections.append((zid[zone1], zid[zone2], distance))
 
 # converts an ISO8601 time format string to seconds (since epoch, probably? doesn't matter)
 def str2time(s):
@@ -105,7 +119,22 @@ except requests.exceptions.ConnectionError: # no wifi :)
 
 
 
-### PREPARE ZONES
+### ZONE POINTS
+
+# return all nonexistant zones from a list
+def get_bad_zones(zone_names):
+    bad_zones = []
+    for i, zone in enumerate(zone_names):
+        print("Checking zone " + str(i + 1) + "/" + str(len(zone_names)), end="\r")
+        while True:
+            x = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zone}]).json()
+            if not x:
+                bad_zones.append(zone)
+                break
+            if len(x) == 1: # zone exists (data returned)
+                break
+            # going above a request a second gives garbage instead
+    return bad_zones
 
 # calculate zone points from the turf API (or if no connection, from the backup file)
 if debug_print_zone_data == True: # debug
@@ -146,7 +175,16 @@ if debug_print_zone_data == True: # debug
         print("\t".join(line).replace(".",","))
     quit()
 elif has_connection: # not debug
+    print("Getting zone data from the Turf API...")
     zone_datas = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zname[zone]} for zone in zlist]).json()
+
+    # error handling
+    if len(zone_datas) != len(zlist):
+        print("WARNING: Turf API returned wrong amount of zones, finding the culprit(s)...")
+        bad_zones = get_bad_zones([zname[zone] for zone in zlist])
+        quit(print("ERROR: Turf zones not found: " + ", ".join(bad_zones)))
+    print("Calculating zone points...")
+
     zone_points = {}
     for i, zone_data in enumerate(zone_datas):
         zone = zlist[i]
@@ -180,7 +218,7 @@ else:
             dump = pickle.load(file)
     except FileNotFoundError:
         quit(print("ERROR: No connection, no backup file found"))
-    
+
     print("WARNING: No connection, loading backup file")
     with open(dumpname + ".pk", "rb") as file:
         zone_points = pickle.load(file)
@@ -190,37 +228,46 @@ else:
         if zone not in zone_points:
             zone_points[zone] = 0
 
-# collect all zones (and their connections)
-zones = {}
-if whitelist:
-    for zone in zone_points:
-        if zone in blacklist:
-            zones[zone] = []
-else:
-    for zone in zone_points:
-        if zone not in blacklist:
-            zones[zone] = []
+
+
+### ZONE CONNECTIONS
+
+# collect all connections in a dictionary
+print("Collecting zone connections...")
+zones = {zone: [] for zone in zone_points}
 for zone1, zone2, length in connections:
     if zone1 in zones and zone2 in zones:
         zones[zone1].append((zone2, length))
         zones[zone2].append((zone1, length))
 
-# filter out (kill) zones that can't be reached from start_zone
-if blacklist:
-    kill_list = list(zones.keys())
-    def survive(zone):
-        kill_list.remove(zone)
-        for neighbor, _ in zones[zone]:
-            if neighbor in kill_list:
-                survive(neighbor)
-    survive(start_zone)
-    if end_zone in kill_list:
-        quit(print("\nERROR: No possible paths found through non-blacklisted zones"))
-    print("Unreachable zones were deleted: " + ", ".join(znames(kill_list)))
-    for zone in list(zones.keys()): # remake zones without these unreachable zones
-        if zone in kill_list:
-            del zones[zone]
-        zones[zone] = []
+# finds zones that can't be reached from start_zone, organizes by reason that the zones can't be reached
+disconnected_zones = list(zones.keys()) # zones unreachable due to a lack of connections
+def reach(zone):
+    disconnected_zones.remove(zone)
+    for neighbor, _ in zones[zone]:
+        if neighbor in disconnected_zones:
+            reach(neighbor)
+reach(start_zone)
+if disconnected_zones:
+    print("WARNING: Zones cannot be reached from starting zone: " + ", ".join(znames(disconnected_zones)))
+
+unreachable_zones = list(zones.keys()) # all unreachable zones
+def reach_blacklist(zone):
+    unreachable_zones.remove(zone)
+    for neighbor, _ in zones[zone]:
+        if neighbor in unreachable_zones and neighbor not in blacklist:
+            reach_blacklist(neighbor)
+reach_blacklist(start_zone)
+
+# zones unreachable due to being cut off by blacklisted zones
+cut_off_zones = [zone for zone in unreachable_zones if zone not in blacklist and zone not in disconnected_zones]
+if cut_off_zones:
+    print("WARNING: Blacklist cuts off zones from starting zone: " + ", ".join(znames(cut_off_zones)))
+
+# filter out unreachable zones by remaking the zones dictionary
+if unreachable_zones:
+    print("Removing unreachable zones for now...")
+    zones = {zone: [] for zone in zone_points if zone not in unreachable_zones}
     for zone1, zone2, length in connections:
         if zone1 in zones and zone2 in zones:
             zones[zone1].append((zone2, length))
@@ -286,24 +333,24 @@ def get_artipoints(zone, d):
             low[zone] = min(low[zone], low[child])
         elif zone not in parent or child != parent[zone]:
             low[zone] = min(low[zone], depth[child])
-    if (zone in parent and is_artipoint) or (zone not in parent and children > 1):
+    if is_artipoint or (zone not in parent and children > 1):
         artipoints.append(zone)
 get_artipoints(start_zone, 0)
 
 # finds articulation points connected to 3+ blocks specifically
 arti3points = []
 block_amount = {}
-def visit(zone):
-    visited.append(zone)
+def flood(zone):
+    flooded.append(zone)
     for neighbor, _ in zones[zone]:
-        if neighbor not in visited:
-            visit(neighbor)
+        if neighbor not in flooded:
+            flood(neighbor)
 for zone in artipoints:
     connected_blocks = 0
-    visited = [zone]
+    flooded = [zone]
     for neighbor, _ in zones[zone]:
-        if neighbor not in visited:
-            visit(neighbor)
+        if neighbor not in flooded:
+            flood(neighbor)
             connected_blocks += 1
     if connected_blocks >= 3:
         arti3points.append(zone)
@@ -338,18 +385,15 @@ paths = [[0, zone_points[start_zone], start_zone, 0, start_zone]]
 
 
 
-### PROCESS
+### GENERATE PATHS
 
-print("\nStartup took " + str(round(time.time() - time_at_start, 2)) + " seconds\n")
+input("\nStartup took " + str(round(time.time() - time_at_start, 2)) + " seconds, press enter to start generating\n")
 time_at_start = time.time()
-# a path is defined as: 
+# a path is defined as:
 # [path distance, path points, last point giving zone visited, distance gone since it was visited, zone 0, zone 1, zone 2...]
 finished_paths = []
 best_points = 0 # finished paths are only accepted if they have the most points out of all finished paths so far
 step = 1
-# helper function gets the distance between four zones (minus the distance between zone2 and zone3, not needed for this)
-def distance_between(zone1, zone2, zone3, zone4):
-    return zone_distance_between[zone1][zone2] + zone_distance_between[zone3][zone4]
 
 while True:
     toadd = []
@@ -391,7 +435,8 @@ while True:
                     continue
             if len(path) >= 7: # if it has visited 4+ zones including the new zone
                 # PROBLEM: visiting the last four zones in another order would have been faster
-                if distance_between(last3_zone, last2_zone, last_zone, new_zone) > distance_between(last3_zone, last_zone, last2_zone, new_zone):
+                if zone_distance_between[new_zone][last_zone] + zone_distance_between[last2_zone][last3_zone]\
+                > zone_distance_between[new_zone][last2_zone] + zone_distance_between[last_zone][last3_zone]:
                     continue
 
             if new_zone_gives_points:
@@ -430,7 +475,7 @@ finished_paths.sort(key=lambda x:x[1], reverse=True)
 threshold = finished_paths[0][1] * 0.8
 temp = []
 for path in finished_paths:
-    if path[1] >= threshold: 
+    if path[1] >= threshold:
         temp.append(path[:2] + path[4:]) # last_captured_zone and last_captured_distance removed
     else:
         finished_paths = temp
@@ -443,7 +488,7 @@ if debug_unused_connections == True:
         for connection in zip(path[2:], path[3:]):
             if connection not in used_connections:
                 used_connections.append(set(connection))
-    
+
     # gathers all connections not in used_connections
     unused_connections = []
     for zone in zones:
@@ -474,8 +519,8 @@ finished_paths.sort(key=lambda x:x[0])
 finished_paths.sort(key=lambda x:x[1], reverse=True)
 
 # writes all other acceptable paths
-print("\nAll paths:")
-if len(finished_paths) != 1: 
+print("\nOther finished paths:")
+if len(finished_paths) != 1:
     for path in finished_paths:
         print("{} points, {} min: {}".format(
             round(path[1], 1),
@@ -489,7 +534,7 @@ best_zones = []
 for i, zone in enumerate(best[2:], start=2):
     if zone in zlist and zone not in best[2:i]:
         best_zones.append(zname[zone].upper())
-print("{} points, {} zones, {} min: {}\n\nTechnical representation:\n{}\n\nThe process took {} seconds".format(
+print("{} points, {} zones, {} min: {}\n\nTechnical representation:\n{}\n\nGeneration took {} seconds".format(
     str(round(best[1], 1)),
     str(len(best_zones)),
     str(int(best[0] / speed)),

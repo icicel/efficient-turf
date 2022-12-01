@@ -17,9 +17,9 @@ end_zone = "k-gymnasiet"
 # blacklist certain zones (the algorithm can't use them for paths)
 blacklist = []
 # convert above to a whitelist (the algorithm can ONLY use them for paths)
-whitelist = False
+is_whitelist = False
 
-# connections between zones as ["zone 1", "zone 2", (length in meters)]
+# connections between zones as (zone 1, zone 2, length in meters)
 connections = [
     ("campingpiren", "k-camping", 370),
     ("surfview", "k-camping", 280),
