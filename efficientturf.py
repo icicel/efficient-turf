@@ -9,8 +9,8 @@ debug_show_artipoints = False # shows articulation points and articulation point
 debug_show_random_path = False # shows a random active path after every process step
 debug_print_zone_data = False # shows zone information in excel format (tab-separated)
 
-# choice of algorithm (currently does nothing)
-algorithm = "bruteforce"
+# choice of algorithm (complete or simplified)
+algorithm = "simplified"
 
 # separate file (data_*.py) containing data such as zone names, connections, start_zone/end_zone zone etc.
 # check data_template.py for examples
@@ -61,6 +61,7 @@ start_zone = zid[data.start_zone]
 if data.end_zone not in defined_zones:
     quit(print("ERROR: End zone not found"))
 end_zone = zid[data.end_zone]
+special_zones = [start_zone, end_zone]
 
 blacklist = []
 if data.is_whitelist: # make sure "blacklist" always refers to a blacklist
@@ -69,9 +70,9 @@ if data.is_whitelist: # make sure "blacklist" always refers to a blacklist
             quit(print("ERROR: Blacklist contains undefined zone name: " + zone))
     for zone in defined_zones:
         if zone not in data.blacklist:
+            if zone == data.start_zone or zone == data.end_zone:
+                quit(print("ERROR: Whitelist does not contain start and end zone"))
             blacklist.append(zid[zone])
-    if start_zone in blacklist or end_zone in blacklist:
-        quit(print("ERROR: Whitelist does not contain start and/or end zone"))
 else:
     for zone in data.blacklist:
         if zone not in defined_zones:
@@ -137,7 +138,7 @@ def get_bad_zones(zone_names):
     return bad_zones
 
 # calculate zone points from the turf API (or if no connection, from the backup file)
-if debug_print_zone_data == True: # debug
+if debug_print_zone_data: # debug, ignore
     if not has_connection:
         quit(print("ERROR: Can't print zone data without a connection"))
     print("name\tage\tpotential days\tpts on take\tpts per hour\tpts total\ttake age\trevisit pts\tneutral pts")
@@ -235,10 +236,10 @@ else:
 # collect all connections in a dictionary
 print("Collecting zone connections...")
 zones = {zone: [] for zone in zone_points}
-for zone1, zone2, length in connections:
+for zone1, zone2, distance in connections:
     if zone1 in zones and zone2 in zones:
-        zones[zone1].append((zone2, length))
-        zones[zone2].append((zone1, length))
+        zones[zone1].append((zone2, distance))
+        zones[zone2].append((zone1, distance))
 
 # finds zones that can't be reached from start_zone, organizes by reason that the zones can't be reached
 disconnected_zones = list(zones.keys()) # zones unreachable due to a lack of connections
@@ -268,10 +269,10 @@ if cut_off_zones:
 if unreachable_zones:
     print("Removing unreachable zones for now...")
     zones = {zone: [] for zone in zone_points if zone not in unreachable_zones}
-    for zone1, zone2, length in connections:
+    for zone1, zone2, distance in connections:
         if zone1 in zones and zone2 in zones:
-            zones[zone1].append((zone2, length))
-            zones[zone2].append((zone1, length))
+            zones[zone1].append((zone2, distance))
+            zones[zone2].append((zone1, distance))
 
 
 
@@ -315,7 +316,31 @@ for endzone in zones:
     distance_between[endzone] = distance_to_endzone
     fastest_path_between[endzone] = fastest_path_to_endzone
 
-# finds all articulation points, en.wikipedia.org/wiki/Biconnected_component
+# simplify connections - remove all references to crossings (that aren't start or end zones)
+if algorithm == "simplified":
+    # add all fastest paths with only crossings as direct connections
+    for zone1 in fastest_path_between:
+        if zone1 in clist and zone1 not in special_zones:
+            continue
+        for zone2 in fastest_path_between[zone1]:
+            if zone2 in clist and zone2 not in special_zones:
+                continue
+            fastest_path = fastest_path_between[zone1][zone2]
+            if len(fastest_path) <= 2: # already direct connection
+                continue
+            for zone in fastest_path[1:-1]:
+                if zone not in clist or zone in special_zones:
+                    break
+            else: # no crossings between zone1 and zone2
+                zones[zone1].append((zone2, distance_between[zone1][zone2]))
+    # remove all connections to/from crossings
+    for zone in clist:
+        if zone not in special_zones:
+            del zones[zone]
+    for zone in zlist + special_zones:
+        zones[zone] = [z for z in zones[zone] if z[0] not in clist or z[0] in special_zones]
+
+# finds all articulation points, https://en.wikipedia.org/wiki/Biconnected_component
 artipoints = []
 visited = []
 depth = {}
@@ -328,7 +353,7 @@ def get_artipoints(zone, d):
     children = 0
     is_artipoint = False
     for child, _ in zones[zone]:
-        if not child in visited:
+        if child not in visited:
             parent[child] = zone
             get_artipoints(child, d + 1)
             children += 1
@@ -337,7 +362,7 @@ def get_artipoints(zone, d):
             low[zone] = min(low[zone], low[child])
         elif zone not in parent or child != parent[zone]:
             low[zone] = min(low[zone], depth[child])
-    if is_artipoint or (zone not in parent and children > 1):
+    if (zone in parent and is_artipoint) or (zone not in parent and children > 1):
         artipoints.append(zone)
 get_artipoints(start_zone, 0)
 
@@ -424,8 +449,8 @@ while True:
             # PROBLEM: it hasn't taken the fastest path to the new zone
             if new_zone_gives_points and last_captured_distance + new_distance > distance_between[last_captured_zone][new_zone]:
                 continue
-            # PROBLEM: it uses the same connection in the same direction twice
             used_connections = zip(path_zones, path_zones[1:])
+            # PROBLEM: it uses the same connection in the same direction twice
             if (last_zone, new_zone) in used_connections:
                 continue
             if new_zone in path_zones and new_zone != end_zone: # if it returns to a zone
