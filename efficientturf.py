@@ -285,31 +285,35 @@ if unreachable_zones:
 # the fastest path from every zone to every other zone
 fastest_path_between = {}
 # the length of that path
-zone_distance_between = {}
+distance_between = {}
 
 # fill out above dictionaries
 for endzone in zones:
-    endpaths = []
     # sub-algorithm, calculates the fastest path from "endzone" to every other zone
-    endzonedistance = {endzone: 0}
-    endzonepathto = {endzone: [endzone]}
-    for connection in zones[endzone]:
-        endpaths.append([connection[1], connection[0]])
-    while True: # for every loop, the shortest path is chosen and extended
-        endpaths.sort(key = lambda x:x[0])
-        endpath = endpaths[0]
-        if endpath[-1] not in endzonedistance:
-            endzonepathto[endpath[-1]] = [endzone] + endpath[1:]
-            endzonedistance[endpath[-1]] = endpath[0]
-            for connection in zones[endpath[-1]]:
-                if connection[0] not in endzonedistance:
-                    endpaths.append([endpath[0] + connection[1]] + endpath[1:] + [connection[0]])
+    endpaths = []
+    distance_to_endzone = {}
+    fastest_path_to_endzone = {}
+    visited = []
+    endpaths = [[0, endzone]]
+    # for every loop, the shortest path in endpaths is chosen and extended
+    # when it reaches a zone it is guaranteed to be the shortest way there
+    while True:
+        endpaths.sort()
+        shortest_path = endpaths[0]
+        next_zone = shortest_path[-1]
+        distance_to_endzone[next_zone] = shortest_path[0]
+        fastest_path_to_endzone[next_zone] = shortest_path[1:]
+        for neighbor, distance in zones[next_zone]:
+            if neighbor not in visited:
+                visited.append(neighbor)
+                endpaths.append([shortest_path[0] + distance] + shortest_path[1:] + [neighbor])
         endpaths.pop(0)
+        # exit when all zones have been reached
         if not endpaths:
             break
     # collects the information in the big dictionaries
-    zone_distance_between[endzone] = endzonedistance
-    fastest_path_between[endzone] = endzonepathto
+    distance_between[endzone] = distance_to_endzone
+    fastest_path_between[endzone] = fastest_path_to_endzone
 
 # finds all articulation points, en.wikipedia.org/wiki/Biconnected_component
 artipoints = []
@@ -361,14 +365,12 @@ if debug_show_artipoints == True:
     print("\nArtipoint stuff:")
     print(znames(artipoints), znames(arti3points), znamed(block_amount), sep="\n")
 if debug_central_zones == True:
-    tl = []
-    for startzone in zone_distance_between:
-        c = 0
-        for endzone in zone_distance_between[startzone]:
-            c += zone_distance_between[startzone][endzone]
-        tl.append([c, startzone])
-    tl.sort(key = lambda x:x[0])
-    print("\nMost central zone: " + zname[tl[0][1]] + "\nMost isolated zone: " + zname[tl[-1][1]])
+    sums = []
+    for startzone in distance_between:
+        s = sum(distance_between[startzone].values())
+        sums.append([s, startzone])
+    sums.sort()
+    print("\nMost central zone: " + zname[sums[0][1]] + "\nMost isolated zone: " + zname[sums[-1][1]])
 if debug_show_zone_points == True:
     print("\nZone points:")
     print(dict(sorted(znamed(zone_points).items(), key=lambda x:x[1], reverse=True)))
@@ -414,13 +416,13 @@ while True:
             # if one of these situations happen it means that there (probably) exists another, better path, and this path is removed
 
             # PROBLEM: it can't be finished without exceeding the time limit
-            if maxdistance - distance < zone_distance_between[end_zone][new_zone]:
+            if maxdistance - distance < distance_between[end_zone][new_zone]:
                 continue
             # PROBLEM: it returns to a zone without visiting any point-giving zones
             if new_zone == last_captured_zone:
                 continue
             # PROBLEM: it hasn't taken the fastest path to the new zone
-            if new_zone_gives_points and last_captured_distance + new_distance > zone_distance_between[last_captured_zone][new_zone]:
+            if new_zone_gives_points and last_captured_distance + new_distance > distance_between[last_captured_zone][new_zone]:
                 continue
             # PROBLEM: it uses the same connection in the same direction twice
             used_connections = zip(path_zones, path_zones[1:])
@@ -435,8 +437,8 @@ while True:
                     continue
             if len(path) >= 7: # if it has visited 4+ zones including the new zone
                 # PROBLEM: visiting the last four zones in another order would have been faster
-                if zone_distance_between[new_zone][last_zone] + zone_distance_between[last2_zone][last3_zone]\
-                > zone_distance_between[new_zone][last2_zone] + zone_distance_between[last_zone][last3_zone]:
+                if distance_between[new_zone][last_zone] + distance_between[last2_zone][last3_zone]\
+                > distance_between[new_zone][last2_zone] + distance_between[last_zone][last3_zone]:
                     continue
 
             if new_zone_gives_points:
@@ -514,7 +516,7 @@ for n in to_delete[::-1]:
     finished_paths.pop(n)
 
 # shortest path at the front
-finished_paths.sort(key=lambda x:x[0])
+finished_paths.sort()
 # path with most points at the front (with ties broken by length because of the above line)
 finished_paths.sort(key=lambda x:x[1], reverse=True)
 
