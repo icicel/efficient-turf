@@ -5,6 +5,7 @@
 debug_unused_connections = False # shows all connections that weren't used by any finished path
 debug_central_zones = False # shows what zones are the most and least central
 debug_show_zone_points = False # shows the zone points dictionary
+debug_show_connections = False # shows the connections dictionary
 debug_show_artipoints = False # shows articulation points and articulation point-related stuff
 debug_show_random_path = False # shows a random active path after every process step
 debug_print_zone_data = False # shows zone information in excel format (tab-separated)
@@ -386,20 +387,25 @@ for zone in artipoints:
     block_amount[zone] = connected_blocks
 
 # debug stuff
-if debug_show_artipoints == True:
+if debug_show_artipoints:
     print("\nArtipoint stuff:")
     print(znames(artipoints), znames(arti3points), znamed(block_amount), sep="\n")
-if debug_central_zones == True:
+if debug_central_zones:
     sums = []
     for startzone in distance_between:
         s = sum(distance_between[startzone].values())
         sums.append([s, startzone])
     sums.sort()
     print("\nMost central zone: " + zname[sums[0][1]] + "\nMost isolated zone: " + zname[sums[-1][1]])
-if debug_show_zone_points == True:
+if debug_show_zone_points:
     print("\nZone points:")
     print(dict(sorted(znamed(zone_points).items(), key=lambda x:x[1], reverse=True)))
-
+if debug_show_connections:
+    print("\nConnections:")
+    for zone in sorted(znamed(zones)):
+        print(zone.upper() + ": " + ", ".join(
+        zname[neighbor] + " (" + str(distance) + ")"
+        for neighbor, distance in sorted(zones[zid[zone]], key=lambda x:x[1])))
 if maxdistance == 0: # no reason to even start the loop if this is the case
     quit(print("ERROR: Distance is zero, aborting"))
 # initialize paths! let's go!
