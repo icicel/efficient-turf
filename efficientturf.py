@@ -2,7 +2,7 @@
 ### SETTINGS
 
 # debug
-debug_unused_connections = False # shows all connections that weren't used by any finished path
+debug_unused_connections = False # shows all connections that weren't used by any fastest path
 debug_central_zones = False # shows what zones are the most and least central
 debug_show_zone_points = False # shows the zone points dictionary
 debug_show_connections = False # shows the connections dictionary
@@ -303,7 +303,7 @@ for endzone in zones:
     endpaths = []
     distance_to_endzone = {}
     fastest_path_to_endzone = {}
-    visited = []
+    visited = [endzone]
     endpaths = [[0, endzone]]
     # for every loop, the shortest path in endpaths is chosen and extended
     # when it reaches a zone it is guaranteed to be the shortest way there
@@ -394,7 +394,10 @@ for zone in artipoints:
         arti3points.append(zone)
     block_amount[zone] = connected_blocks
 
-# debug stuff
+
+
+### DEBUG
+
 if debug_show_artipoints:
     print("\nArtipoint stuff:")
     print(znames(artipoints), znames(arti3points), znamed(block_amount), sep="\n")
@@ -414,10 +417,27 @@ if debug_show_connections:
         print(zone.upper() + ": " + ", ".join(
         zname[neighbor] + " (" + str(distance) + ")"
         for neighbor, distance in sorted(zones[zid[zone]], key=lambda x:x[1])))
+if debug_unused_connections:
+    # collects all connections that paths use
+    used_connections = []
+    for zone in fastest_path_between:
+        for path in fastest_path_between[zone].values():
+            for connection in zip(path, path[1:]):
+                if set(connection) not in used_connections:
+                    used_connections.append(set(connection))
+    # gathers all connections not in used_connections
+    unused_connections = []
+    for zone in zones:
+        for neighbor, _ in zones[zone]:
+            connection = {zone, neighbor}
+            if connection not in used_connections and connection not in unused_connections:
+                unused_connections.append(connection)
+    unused_connections = [tuple(znames(sorted(list(x)))) for x in unused_connections]
+    unused_connections.sort()
+    print("\nUnused paths:")
+    print(unused_connections)
 if maxdistance == 0: # no reason to even start the loop if this is the case
-    quit(print("ERROR: Distance is zero, aborting"))
-# initialize paths! let's go!
-paths = [[0, zone_points[start_zone], start_zone, 0, start_zone]]
+    quit(print("ERROR: Distance is zero"))
 
 
 
@@ -432,12 +452,13 @@ input("\nStartup took " + str(round(time.time() - time_at_start, 2)) + " seconds
 time_at_start = time.time()
 # a path is defined as:
 # [path distance, path points, last point giving zone visited, distance gone since it was visited, zone 0, zone 1, zone 2...]
+paths = [[0, zone_points[start_zone], start_zone, 0, start_zone]]
 finished_paths = []
 best_points = 0 # finished paths are only accepted if they have the most points out of all finished paths so far
 step = 1
 
 while True:
-    toadd = []
+    new_paths = []
     for path in paths:
         last_zone = path[-1]
         last2_zone = path[-2]
@@ -463,7 +484,7 @@ while True:
             # PROBLEM: it hasn't taken the fastest path to the new zone
             if new_zone_gives_points and last_captured_distance + new_distance > distance_between[last_captured_zone][new_zone]:
                 continue
-            used_connections = zip(path_zones, path_zones[1:])
+            used_connections = list(zip(path_zones, path_zones[1:]))
             # PROBLEM: it uses the same connection in the same direction twice
             if (last_zone, new_zone) in used_connections:
                 continue
@@ -481,9 +502,9 @@ while True:
                     continue
 
             if new_zone_gives_points:
-                toadd.append([distance, points + zone_points[new_zone], new_zone, 0] + path_zones + [new_zone])
+                new_paths.append([distance, points + zone_points[new_zone], new_zone, 0] + path_zones + [new_zone])
             else:
-                toadd.append([distance, points, last_captured_zone, last_captured_distance + new_distance] + path_zones + [new_zone])
+                new_paths.append([distance, points, last_captured_zone, last_captured_distance + new_distance] + path_zones + [new_zone])
         if last_zone == end_zone:
             for zone in prioritylist:
                 if zone not in path_zones:
@@ -493,7 +514,7 @@ while True:
                 finished_paths.append(path)
 
     del paths
-    paths = toadd
+    paths = new_paths
     if paths == []: # if all paths are finished
         break
     if debug_show_random_path:
@@ -526,26 +547,6 @@ for path in finished_paths:
         finished_paths = temp
         break
 
-if debug_unused_connections == True:
-    # collects all connections that the finished paths use
-    used_connections = []
-    for path in finished_paths:
-        for connection in zip(path[2:], path[3:]):
-            if connection not in used_connections:
-                used_connections.append(set(connection))
-
-    # gathers all connections not in used_connections
-    unused_connections = []
-    for zone in zones:
-        for neighbor, _ in zones[zone]:
-            connection = {zone, neighbor}
-            if connection not in used_connections and connection not in unused_connections:
-                unused_connections.append(connection)
-    unused_connections = [tuple(znames(sorted(list(x)))) for x in unused_connections]
-    unused_connections.sort()
-    print("\nUnused paths:")
-    print(unused_connections)
-
 # checks for practically identical paths
 dupecheck = []
 to_delete = []
@@ -566,7 +567,7 @@ finished_paths.sort(key=lambda x:x[1], reverse=True)
 # writes all other acceptable paths
 print("\nOther finished paths:")
 if len(finished_paths) != 1:
-    for path in finished_paths:
+    for path in finished_paths[1:26]:
         print("{} points, {} min: {}".format(
             round(path[1], 1),
             str(int(path[0] / speed)),
@@ -575,6 +576,11 @@ if len(finished_paths) != 1:
 # write the result
 print("\nBest path:")
 best = finished_paths[0]
+if algorithm == "complete":
+    best_complete = best
+elif algorithm == "simplified":
+    best_complete = [best[:2]] + [fastest_path_between[zfrom][zto][:-1] for zfrom, zto in zip(best[2:], best[3:])] + [[end_zone]]
+    best_complete = [item for sublist in best_complete for item in sublist]
 best_zones = []
 for i, zone in enumerate(best[2:], start=2):
     if zone in zlist and zone not in best[2:i]:
@@ -584,5 +590,5 @@ print("{} points, {} zones, {} min: {}\n\nTechnical representation:\n{}\n\nGener
     str(len(best_zones)),
     str(int(best[0] / speed)),
     "-".join(best_zones),
-    str(best[:2] + znames(best[2:])),
+    str(best_complete[:2] + znames(best_complete[2:])),
     str(round(time.time() - time_at_start, 2))))
