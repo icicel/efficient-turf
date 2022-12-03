@@ -82,6 +82,14 @@ else:
             quit(print("ERROR: Blacklist contains start or end zone"))
         blacklist.append(zid[zone])
 
+prioritylist = []
+for zone in data.prioritylist:
+    if zone not in defined_zones:
+        quit(print("ERROR: Prioritylist contains undefined zone name: " + zone))
+    if algorithm == "simplified" and zone in data.clist:
+        quit(print("ERROR: Prioritylist contains a crossing which will be removed by the \"simplified\" algorithm: " + zone))
+    prioritylist.append(zid[zone])
+
 connections = []
 for zone1, zone2, distance in data.connections:
     if zone1 not in defined_zones:
@@ -476,9 +484,13 @@ while True:
                 toadd.append([distance, points + zone_points[new_zone], new_zone, 0] + path_zones + [new_zone])
             else:
                 toadd.append([distance, points, last_captured_zone, last_captured_distance + new_distance] + path_zones + [new_zone])
-        if last_zone == end_zone and points >= best_points:
-            best_points = points
-            finished_paths.append(path)
+        if last_zone == end_zone:
+            for zone in prioritylist:
+                if zone not in path_zones:
+                    break
+            else: # all zones in prioritylist have been visited
+                best_points = max(best_points, points)
+                finished_paths.append(path)
 
     del paths
     paths = toadd

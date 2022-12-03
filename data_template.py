@@ -19,6 +19,9 @@ blacklist = []
 # convert above to a whitelist (the algorithm can ONLY use them for paths)
 is_whitelist = False
 
+# list of zones that MUST be visited
+prioritylist = []
+
 # connections between zones as (zone 1, zone 2, length in meters)
 connections = [
     ("campingpiren", "k-camping", 370),
