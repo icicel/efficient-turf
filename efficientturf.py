@@ -10,8 +10,10 @@ debug_show_artipoints = False # shows articulation points and articulation point
 debug_show_random_path = False # shows a random active path after every process step
 debug_print_zone_data = False # shows zone information in excel format (tab-separated)
 
-# choice of algorithm (complete or simplified)
-algorithm = "simplified"
+# choice of algorithm
+# complete - no changes
+# simplified - attempts to remove crossing zones by combining connections
+algorithm = "complete"
 
 # separate file (data_*.py) containing data such as zone names, connections, start_zone/end_zone zone etc.
 # check data_template.py for examples
@@ -42,65 +44,71 @@ else:
     maxdistance = speed * int(input("Time in minutes:\n> "))
 time_at_start = time.time()
 
-# import and enumerate data 
+# import data
+# done in a quite wacky way!
 try:
     data = importlib.import_module("data_" + data_set)
 except ModuleNotFoundError:
     quit(print("ERROR: data_" + data_set + ".py not found"))
+
+# create zid, zname, zone_list and crossing_list
+zcoords = {}
+zone_list = data.zone_list
+crossing_list = data.crossing_list
 zid = {}
 zname = {}
-for i, zone in enumerate(data.zlist + data.clist): # generate numerical ids for zones
+for i, zone in enumerate(zone_list + crossing_list):
     zid[zone] = i
     zname[i] = zone
-zlist = [zid[zone] for zone in data.zlist]
-clist = [zid[zone] for zone in data.clist]
-defined_zones = data.zlist + data.clist
+zone_list = [zid[z] for z in zone_list]
+crossing_list = [zid[z] for z in crossing_list]
 
-if data.start_zone not in defined_zones:
+# create connections
+connections = []
+for zone1, zone2, distance in data.connections:
+    if zone1 not in zid:
+        quit(print("ERROR: Connections contains undefined zone name: " + zone1))
+    if zone2 not in zid:
+        quit(print("ERROR: Connections contains undefined zone name: " + zone2))
+    connections.append((zid[zone1], zid[zone2], distance))
+
+# create start_zone and end_zone
+if data.start_zone not in zid:
     quit(print("ERROR: Start zone not found"))
 start_zone = zid[data.start_zone]
-if data.end_zone not in defined_zones:
+if data.end_zone not in zid:
     quit(print("ERROR: End zone not found"))
 end_zone = zid[data.end_zone]
 special_zones = [start_zone, end_zone]
 
+# create blacklist
+# make sure blacklist always refers to a blacklist by inverting it if it's a whitelist
 blacklist = []
-if data.is_whitelist: # make sure "blacklist" always refers to a blacklist
+if data.is_whitelist:
     for zone in data.blacklist:
-        if zone not in defined_zones:
+        if zone not in zid:
             quit(print("ERROR: Blacklist contains undefined zone name: " + zone))
-    for zone in defined_zones:
+    for zone in zid:
         if zone not in data.blacklist:
             if zone == data.start_zone or zone == data.end_zone:
                 quit(print("ERROR: Whitelist does not contain start and end zone"))
             blacklist.append(zid[zone])
 else:
     for zone in data.blacklist:
-        if zone not in defined_zones:
+        if zone not in zid:
             quit(print("ERROR: Blacklist contains undefined zone name: " + zone))
         if zone == data.start_zone or zone == data.end_zone:
             quit(print("ERROR: Blacklist contains start or end zone"))
         blacklist.append(zid[zone])
 
+# create prioritylist
 prioritylist = []
 for zone in data.prioritylist:
-    if zone not in defined_zones:
+    if zone not in zid:
         quit(print("ERROR: Prioritylist contains undefined zone name: " + zone))
-    if algorithm == "simplified" and zone in data.clist:
+    if algorithm == "simplified" and zid[zone] in crossing_list:
         quit(print("ERROR: Prioritylist contains a crossing which will be removed by the \"simplified\" algorithm: " + zone))
     prioritylist.append(zid[zone])
-
-connections = []
-for zone1, zone2, distance in data.connections:
-    if zone1 not in defined_zones:
-        quit(print("ERROR: Connections contains undefined zone name: " + zone1))
-    if zone2 not in defined_zones:
-        quit(print("ERROR: Connections contains undefined zone name: " + zone2))
-    connections.append((zid[zone1], zid[zone2], distance))
-
-# converts an ISO8601 time format string to seconds (since epoch, probably? doesn't matter)
-def str2time(s):
-    return datetime.datetime.strptime(s, "%Y-%m-%dT%H:%M:%S%z").timestamp()
 
 # converts a list of zone ids to a list of zone names
 def znames(zidlist):
@@ -108,6 +116,10 @@ def znames(zidlist):
 # the same but for dictionary keys
 def znamed(ziddict):
     return {zname[zone]: ziddict[zone] for zone in ziddict}
+
+# converts an ISO8601 time format string to seconds (since epoch, probably? doesn't matter)
+def str2time(s):
+    return datetime.datetime.strptime(s, "%Y-%m-%dT%H:%M:%S%z").timestamp()
 
 # get round info with the turf API (specifically, how many hours are left)
 try:
@@ -151,9 +163,9 @@ if debug_print_zone_data: # debug, ignore
     if not has_connection:
         quit(print("ERROR: Can't print zone data without a connection"))
     print("name\tage\tpotential days\tpts on take\tpts per hour\tpts total\ttake age\trevisit pts\tneutral pts")
-    zone_datas = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zname[zone]} for zone in zlist]).json()
+    zone_datas = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zname[zone]} for zone in zone_list]).json()
     for i, zone_data in enumerate(zone_datas):
-        zone = zlist[i]
+        zone = zone_list[i]
         line = [zname[zone]]
         hours_existed = (time.time() - str2time(zone_data["dateCreated"])) / 3600
         if zone_data["totalTakeovers"]:
@@ -186,18 +198,18 @@ if debug_print_zone_data: # debug, ignore
     quit()
 elif has_connection: # not debug
     print("Getting zone data from the Turf API...")
-    zone_datas = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zname[zone]} for zone in zlist]).json()
+    zone_datas = requests.post("http://api.turfgame.com/v4/zones", json=[{"name": zname[zone]} for zone in zone_list]).json()
 
     # error handling
-    if len(zone_datas) != len(zlist):
+    if len(zone_datas) != len(zone_list):
         print("WARNING: Turf API returned wrong amount of zones, finding the culprit(s)...")
-        bad_zones = get_bad_zones([zname[zone] for zone in zlist])
+        bad_zones = get_bad_zones([zname[zone] for zone in zone_list])
         quit(print("ERROR: Turf zones not found: " + ", ".join(bad_zones)))
     print("Calculating zone points...")
 
     zone_points = {}
     for i, zone_data in enumerate(zone_datas):
-        zone = zlist[i]
+        zone = zone_list[i]
 
         hours_existed = (time.time() - str2time(zone_data["dateCreated"])) / 3600
         # get average hours before the zone is lost
@@ -216,7 +228,7 @@ elif has_connection: # not debug
                     zone_points[zone] = 0
         else: # no currentOwner - gives neutral bonus instead
             zone_points[zone] += 50
-    for zone in clist: # crossings don't give points
+    for zone in crossing_list: # crossings don't give points
         zone_points[zone] = 0
     with open(dumpname + ".pk", "wb") as file:
         pickle.dump(zone_points, file)
@@ -232,9 +244,9 @@ else:
     print("WARNING: No connection, loading backup file")
     with open(dumpname + ".pk", "rb") as file:
         zone_points = pickle.load(file)
-    for zone in clist:
+    for zone in crossing_list:
         zone_points[zone] = 0
-    for zone in zlist:
+    for zone in zone_list:
         if zone not in zone_points:
             zone_points[zone] = 0
 
@@ -329,25 +341,25 @@ for endzone in zones:
 if algorithm == "simplified":
     # add all fastest paths with only crossings as direct connections
     for zone1 in fastest_path_between:
-        if zone1 in clist and zone1 not in special_zones:
+        if zone1 in crossing_list and zone1 not in special_zones:
             continue
         for zone2 in fastest_path_between[zone1]:
-            if zone2 in clist and zone2 not in special_zones:
+            if zone2 in crossing_list and zone2 not in special_zones:
                 continue
             fastest_path = fastest_path_between[zone1][zone2]
             if len(fastest_path) <= 2: # already direct connection
                 continue
             for zone in fastest_path[1:-1]:
-                if zone not in clist or zone in special_zones:
+                if zone not in crossing_list or zone in special_zones:
                     break
             else: # no crossings between zone1 and zone2
                 zones[zone1].append((zone2, distance_between[zone1][zone2]))
     # remove all connections to/from crossings
-    for zone in clist:
+    for zone in crossing_list:
         if zone not in special_zones:
             del zones[zone]
-    for zone in zlist + special_zones:
-        zones[zone] = [z for z in zones[zone] if z[0] not in clist or z[0] in special_zones]
+    for zone in zone_list + special_zones:
+        zones[zone] = [z for z in zones[zone] if z[0] not in crossing_list or z[0] in special_zones]
 
 # finds all articulation points, https://en.wikipedia.org/wiki/Biconnected_component
 artipoints = []
@@ -571,7 +583,7 @@ if len(finished_paths) != 1:
         print("{} points, {} min: {}".format(
             round(path[1], 1),
             str(int(path[0] / speed)),
-            "-".join([zname[zone].upper() for zone in path[2:] if zone in zlist])))
+            "-".join([zname[zone].upper() for zone in path[2:] if zone in zone_list])))
 
 # write the result
 print("\nBest path:")
@@ -583,7 +595,7 @@ elif algorithm == "simplified":
     best_complete = [item for sublist in best_complete for item in sublist]
 best_zones = []
 for i, zone in enumerate(best[2:], start=2):
-    if zone in zlist and zone not in best[2:i]:
+    if zone in zone_list and zone not in best[2:i]:
         best_zones.append(zname[zone].upper())
 print("{} points, {} zones, {} min: {}\n\nTechnical representation:\n{}\n\nGeneration took {} seconds".format(
     str(round(best[1], 1)),

@@ -1,13 +1,13 @@
 
 # list of regular zones
-zlist = ["campingpiren", "surfview", "nösnäsån", "gulzon", "bathview", "nösnäsbacken", "hallernazon", "kozon",
+zone_list = ["campingpiren", "surfview", "nösnäsån", "gulzon", "bathview", "nösnäsbacken", "hallernazon", "kozon",
          "genomskogen", "sneezenose", "dragkamp", "inklämdpågräs", "solgårdsstig", "husarrondell", "movedwindmill",
          "kvarnskogen", "stenryttare", "kvarntäppan", "trädväg", "liteskogbara", "hasselbacke", "frispel", "tullaull",
          "yttreucklums", "ucklumcykel", "kringelikrok", "norumskyrka", "jansvy", "bakomängen", "torpzone", "sköntgrönt",
          "motfurufjäll", "gamlahallerna", "odlamedcykel"]
 
 # list of crossing zones (purely functional zones that don't give points)
-clist = ["k-klassrum", "k-nösnäs", "k-gymnasiet", "k-backen", "k-ucklum", "k-hallerna", "k-solgård", "k-kristinedal",
+crossing_list = ["k-klassrum", "k-nösnäs", "k-gymnasiet", "k-backen", "k-ucklum", "k-hallerna", "k-solgård", "k-kristinedal",
          "k-camping", "k-kvarnberg", "k-skogsbryn", "k-älvhem", "k-strandnorum", "k-tuvull", "k-kyrkenorum"]
 
 # start and end zone
