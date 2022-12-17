@@ -19,6 +19,11 @@ algorithm = "complete"
 # check data_template.py for examples
 data_set = "template"
 
+# where to get zones and connections from
+# data - from data_set
+# csv - from csv files (*_c.csv, *_z.csv, *_con.csv) imported from google my maps
+import_source = "csv"
+
 # your turfing speed (m/min), used to convert distances to time
 speed = 64
 
@@ -51,26 +56,80 @@ try:
 except ModuleNotFoundError:
     quit(print("ERROR: data_" + data_set + ".py not found"))
 
-# create zid, zname, zone_list and crossing_list
-zcoords = {}
-zone_list = data.zone_list
-crossing_list = data.crossing_list
-zid = {}
-zname = {}
-for i, zone in enumerate(zone_list + crossing_list):
-    zid[zone] = i
-    zname[i] = zone
-zone_list = [zid[z] for z in zone_list]
-crossing_list = [zid[z] for z in crossing_list]
+# create zid, zname, zone_list, crossing_list and connections
+if import_source == "data":
+    zcoords = {}
+    zone_list = data.zone_list
+    crossing_list = data.crossing_list
+    zid = {}
+    zname = {}
+    for i, zone in enumerate(zone_list + crossing_list):
+        zid[zone] = i
+        zname[i] = zone
+    zone_list = [zid[z] for z in zone_list]
+    crossing_list = [zid[z] for z in crossing_list]
+    connections = []
+    for zone1, zone2, distance in data.connections:
+        if zone1 not in zid:
+            quit(print("ERROR: Connections contains undefined zone name: " + zone1))
+        if zone2 not in zid:
+            quit(print("ERROR: Connections contains undefined zone name: " + zone2))
+        connections.append((zid[zone1], zid[zone2], distance))
 
-# create connections
-connections = []
-for zone1, zone2, distance in data.connections:
-    if zone1 not in zid:
-        quit(print("ERROR: Connections contains undefined zone name: " + zone1))
-    if zone2 not in zid:
-        quit(print("ERROR: Connections contains undefined zone name: " + zone2))
-    connections.append((zid[zone1], zid[zone2], distance))
+elif import_source == "csv":
+    import geopy.distance as geo
+    import math
+    zid = {}
+    zname = {}
+    zcoords = {}
+    zone_list = []
+    crossing_list = []
+    z_in = open(data_set + "_z.csv", encoding="utf-8").read().splitlines()[1:]
+    c_in = open(data_set + "_c.csv", encoding="utf-8").read().splitlines()[1:]
+    for i, zone in enumerate(z_in + c_in):
+        coords, name, _ = zone.split(",")
+        lon, lat = coords[8:-2].split(" ")[:2]
+        name = name.lower()
+        zid[name] = i
+        zname[i] = name
+        zcoords[i] = (float(lon), float(lat))
+        if i < len(z_in):
+            zone_list.append(i)
+        else:
+            crossing_list.append(i)
+        i += 1
+    xs = [s[0] for s in zcoords.values()]
+    ys = [s[1] for s in zcoords.values()]
+    average_x = (max(xs) + min(xs)) / 2
+    # equirectangular projection mapping
+    def lonlat2xy(lon, lat):
+        # Much pain was endured to get to this formula. It's 5 in the morning. I'm tired, boss.
+        horizontal_scaling = math.cos(lat * math.pi / 180) 
+        return ((lon - average_x) * horizontal_scaling, lat)
+    for i in zcoords:
+        zcoords[i] = lonlat2xy(zcoords[i][0], zcoords[i][1])
+    connections = []
+    for line in open(data_set + "_con.csv").read().splitlines()[1:]:
+        # points as in points (corners?) of a line
+        points = line.split(", ")
+        points[0] = points[0].split("(")[-1]
+        points[-1] = points[-1].split(")")[0]
+        points = [lonlat2xy(float(lon), float(lat)) for lon, lat in [p.split(" ")[:2] for p in points]]
+        distance = 0
+        for p1, p2 in zip(points, points[1:]):
+            distance += geo.distance(p1, p2).meters
+        # get the zones closest to each end of the line and assume they're connected by it
+        z1 = min(zcoords, key=lambda z: geo.distance(zcoords[z], points[0]).meters)
+        z2 = min(zcoords, key=lambda z: geo.distance(zcoords[z], points[-1]).meters)
+        connections.append((z1, z2, int(distance)))
+
+# might do something with this code in the future
+# import matplotlib.pyplot as plot
+# plot.scatter([s[0] for s in zcoords.values()], [s[1] for s in zcoords.values()], c="blue")
+# plot.xlim(min(xs), max(xs))
+# plot.ylim(min(ys), max(ys))
+# plot.gca().set_aspect('equal', adjustable='box')
+# plot.show()
 
 # create start_zone and end_zone
 if data.start_zone not in zid:
