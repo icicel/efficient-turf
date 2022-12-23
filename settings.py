@@ -8,10 +8,12 @@ debug_show_artipoints = False # shows articulation points and articulation point
 debug_show_random_path = False # shows a random active path after every process step
 debug_print_zone_data = False # shows zone information in excel format (tab-separated)
 
-# choice of algorithm
-# complete - no changes
-# simplified - attempts to remove crossing zones by combining connections
-algorithm = "complete"
+# attempts to remove crossing zones in post by combining connections
+remove_crossings = False
+
+# the algorithm is disallowed from returning to a zone after already having visited it
+# improves speed substantially but produces less optimal routes
+no_revisit = False
 
 # separate file (data/*.py) containing data such as zone names, connections, start_zone/end_zone zone etc.
 # check data/template.py for examples
@@ -22,8 +24,8 @@ data_set = "template"
 # csv - from csv files (csv/*_c.csv, csv/*_z.csv, csv/*_con.csv) imported from google my maps
 import_source = "data"
 
-# your turfing speed (m/min), used to convert distances to time
-speed = 64
+# m/min, used to convert distances to time
+turfing_speed = 64
 
 # turf username
 username = "icicle"

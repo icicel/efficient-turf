@@ -9,12 +9,6 @@ debug_show_connections = settings.debug_show_connections
 debug_show_artipoints = settings.debug_show_artipoints
 debug_show_random_path = settings.debug_show_random_path
 debug_print_zone_data = settings.debug_print_zone_data
-algorithm = settings.algorithm
-data_set = settings.data_set
-import_source = settings.import_source
-speed = settings.speed
-username = settings.username
-dumpname = settings.dumpname
 
 
 
@@ -24,18 +18,18 @@ import time, datetime, requests, random, importlib, pickle
 if debug_print_zone_data:
     maxdistance = 0
 else:
-    maxdistance = speed * int(input("Time in minutes:\n> "))
+    maxdistance = settings.turfing_speed * int(input("Time in minutes:\n> "))
 time_at_start = time.time()
 
 # import data
 # done in a quite wacky way!
 try:
-    data = importlib.import_module("data." + data_set)
+    data = importlib.import_module("data." + settings.data_set)
 except ModuleNotFoundError:
-    quit(print("ERROR: data_" + data_set + ".py not found"))
+    quit(print("ERROR: data_" + settings.data_set + ".py not found"))
 
 # create zid, zname, zone_list, crossing_list and connections
-if import_source == "data":
+if settings.import_source == "data":
     zcoords = {}
     zone_list = data.zone_list
     crossing_list = data.crossing_list
@@ -54,7 +48,7 @@ if import_source == "data":
             quit(print("ERROR: Connections contains undefined zone name: " + zone2))
         connections.append((zid[zone1], zid[zone2], distance))
 
-elif import_source == "csv":
+elif settings.import_source == "csv":
     import geopy.distance as geo
     import math
     zid = {}
@@ -62,8 +56,8 @@ elif import_source == "csv":
     zcoords = {}
     zone_list = []
     crossing_list = []
-    z_in = open("csv/" + data_set + "_z.csv", encoding="utf-8").read().splitlines()[1:]
-    c_in = open("csv/" + data_set + "_c.csv", encoding="utf-8").read().splitlines()[1:]
+    z_in = open("csv/" + settings.data_set + "_z.csv", encoding="utf-8").read().splitlines()[1:]
+    c_in = open("csv/" + settings.data_set + "_c.csv", encoding="utf-8").read().splitlines()[1:]
     for i, zone in enumerate(z_in + c_in):
         coords, name, _ = zone.split(",")
         lon, lat = coords[8:-2].split(" ")[:2]
@@ -87,7 +81,7 @@ elif import_source == "csv":
     for i in zcoords:
         zcoords[i] = lonlat2xy(zcoords[i][0], zcoords[i][1])
     connections = []
-    for line in open("csv/" + data_set + "_con.csv").read().splitlines()[1:]:
+    for line in open("csv/" + settings.data_set + "_con.csv").read().splitlines()[1:]:
         # points as in points (corners?) of a line
         points = line.split(", ")
         points[0] = points[0].split("(")[-1]
@@ -143,8 +137,8 @@ prioritylist = []
 for zone in data.prioritylist:
     if zone not in zid:
         quit(print("ERROR: Prioritylist contains undefined zone name: " + zone))
-    if algorithm == "simplified" and zid[zone] in crossing_list:
-        quit(print("ERROR: Prioritylist contains a crossing which will be removed by the \"simplified\" algorithm: " + zone))
+    if settings.remove_crossings and zid[zone] in crossing_list:
+        quit(print("ERROR: Prioritylist contains a crossing, which are set to be removed: " + zone))
     prioritylist.append(zid[zone])
 
 # converts a list of zone ids to a list of zone names
@@ -215,7 +209,7 @@ if debug_print_zone_data: # debug, ignore
         line.append(int(zone_data["pointsPerHour"]))
         line.append(int(zone_data["takeoverPoints"] + potential_hours * zone_data["pointsPerHour"]))
         try:
-            if zone_data["currentOwner"]["name"] == username:
+            if zone_data["currentOwner"]["name"] == settings.username:
                 hours_since_taken = (time.time() - str2time(zone_data["dateLastTaken"])) / 3600
                 line.append(int(hours_since_taken / 24))
                 if hours_since_taken >= 23:
@@ -257,7 +251,7 @@ elif has_connection: # not debug
         zone_points[zone] = int(zone_data["takeoverPoints"] + potential_hours * zone_data["pointsPerHour"])
         # if currentOwner is yourself, give revisit points if over 23 hours ago
         # give neutral points if no currentOwner
-        if "currentOwner" in zone_data and zone_data["currentOwner"]["name"] == username:
+        if "currentOwner" in zone_data and zone_data["currentOwner"]["name"] == settings.username:
                 hours_since_taken = (time.time() - str2time(zone_data["dateLastTaken"])) / 3600
                 if hours_since_taken > 23:
                     zone_points[zone] = int(zone_data["takeoverPoints"] / 2)
@@ -267,19 +261,19 @@ elif has_connection: # not debug
             zone_points[zone] += 50
     for zone in crossing_list: # crossings don't give points
         zone_points[zone] = 0
-    with open(dumpname + ".pk", "wb") as file:
+    with open(settings.dumpname + ".pk", "wb") as file:
         pickle.dump(zone_points, file)
 
 # no connection, use backup file to get zone points instead
 else:
     try:
-        with open(dumpname + ".pk", "rb") as file:
+        with open(settings.dumpname + ".pk", "rb") as file:
             dump = pickle.load(file)
     except FileNotFoundError:
         quit(print("ERROR: No connection, no backup file found"))
 
     print("WARNING: No connection, loading backup file")
-    with open(dumpname + ".pk", "rb") as file:
+    with open(settings.dumpname + ".pk", "rb") as file:
         zone_points = pickle.load(file)
     for zone in crossing_list:
         zone_points[zone] = 0
@@ -375,7 +369,7 @@ for endzone in zones:
     fastest_path_between[endzone] = fastest_path_to_endzone
 
 # simplify connections - remove all references to crossings (that aren't start or end zones)
-if algorithm == "simplified":
+if settings.remove_crossings:
     # add all fastest paths with only crossings as direct connections
     for zone1 in fastest_path_between:
         if zone1 in crossing_list and zone1 not in special_zones:
@@ -538,6 +532,9 @@ while True:
             if (last_zone, new_zone) in used_connections:
                 continue
             if new_zone in path_zones and new_zone != end_zone: # if it returns to a zone
+                # PROBLEM: not allowed to return to a zone
+                if settings.no_revisit:
+                    continue
                 # PROBLEM: the new zone has been visited three times
                 if path_zones.count(new_zone) > 1 and new_zone not in arti3points:
                     continue
@@ -554,12 +551,12 @@ while True:
                 new_paths.append([distance, points + zone_points[new_zone], new_zone, 0] + path_zones + [new_zone])
             else:
                 new_paths.append([distance, points, last_captured_zone, last_captured_distance + new_distance] + path_zones + [new_zone])
-        if last_zone == end_zone:
+        if last_zone == end_zone and points >= best_points:
             for zone in prioritylist:
                 if zone not in path_zones:
                     break
             else: # all zones in prioritylist have been visited
-                best_points = max(best_points, points)
+                best_points = points
                 finished_paths.append(path)
 
     del paths
@@ -619,17 +616,17 @@ if len(finished_paths) != 1:
     for path in finished_paths[1:26]:
         print("{} points, {} min: {}".format(
             round(path[1], 1),
-            str(int(path[0] / speed)),
+            str(int(path[0] / settings.turfing_speed)),
             "-".join([zname[zone].upper() for zone in path[2:] if zone in zone_list])))
 
 # write the result
 print("\nBest path:")
 best = finished_paths[0]
-if algorithm == "complete":
-    best_complete = best
-elif algorithm == "simplified":
+if settings.remove_crossings:
     best_complete = [best[:2]] + [fastest_path_between[zfrom][zto][:-1] for zfrom, zto in zip(best[2:], best[3:])] + [[end_zone]]
     best_complete = [item for sublist in best_complete for item in sublist]
+else:
+    best_complete = best
 best_zones = []
 for i, zone in enumerate(best[2:], start=2):
     if zone in zone_list and zone not in best[2:i]:
@@ -637,7 +634,7 @@ for i, zone in enumerate(best[2:], start=2):
 print("{} points, {} zones, {} min: {}\n\nTechnical representation:\n{}\n\nGeneration took {} seconds".format(
     str(round(best[1], 1)),
     str(len(best_zones)),
-    str(int(best[0] / speed)),
+    str(int(best[0] / settings.turfing_speed)),
     "-".join(best_zones),
     str(best_complete[:2] + znames(best_complete[2:])),
     str(round(time.time() - time_at_start, 2))))
