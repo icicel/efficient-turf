@@ -6,7 +6,7 @@ zone_list = ["campingpiren", "surfview", "nösnäsån", "gulzon", "bathview", "n
          "yttreucklums", "ucklumcykel", "kringelikrok", "norumskyrka", "jansvy", "bakomängen", "torpzone", "sköntgrönt",
          "motfurufjäll", "gamlahallerna", "odlamedcykel"]
 
-# list of crossing zones (purely functional zones that don't give points)
+# list of crossing zones
 crossing_list = ["k-klassrum", "k-nösnäs", "k-gymnasiet", "k-backen", "k-ucklum", "k-hallerna", "k-solgård", "k-kristinedal",
          "k-camping", "k-kvarnberg", "k-skogsbryn", "k-älvhem", "k-strandnorum", "k-tuvull", "k-kyrkenorum"]
 

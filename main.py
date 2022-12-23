@@ -1,42 +1,20 @@
 
 ### SETTINGS
 
-# debug
-debug_unused_connections = False # shows all connections that weren't used by any fastest path
-debug_central_zones = False # shows what zones are the most and least central
-debug_show_zone_points = False # shows the zone points dictionary
-debug_show_connections = False # shows the connections dictionary
-debug_show_artipoints = False # shows articulation points and articulation point-related stuff
-debug_show_random_path = False # shows a random active path after every process step
-debug_print_zone_data = False # shows zone information in excel format (tab-separated)
-
-# choice of algorithm
-# complete - no changes
-# simplified - attempts to remove crossing zones by combining connections
-algorithm = "complete"
-
-# separate file (data_*.py) containing data such as zone names, connections, start_zone/end_zone zone etc.
-# check data_template.py for examples
-data_set = "template"
-
-# where to get zones and connections from
-# data - from data_set
-# csv - from csv files (*_c.csv, *_z.csv, *_con.csv) imported from google my maps
-import_source = "csv"
-
-# your turfing speed (m/min), used to convert distances to time
-speed = 64
-
-# turf username
-username = "icicle"
-
-# backup file name (*.pk)
-dumpname = "turf"
-
-
-
-
-
+import settings
+debug_unused_connections = settings.debug_unused_connections
+debug_central_zones = settings.debug_central_zones
+debug_show_zone_points = settings.debug_show_zone_points
+debug_show_connections = settings.debug_show_connections
+debug_show_artipoints = settings.debug_show_artipoints
+debug_show_random_path = settings.debug_show_random_path
+debug_print_zone_data = settings.debug_print_zone_data
+algorithm = settings.algorithm
+data_set = settings.data_set
+import_source = settings.import_source
+speed = settings.speed
+username = settings.username
+dumpname = settings.dumpname
 
 
 
@@ -52,7 +30,7 @@ time_at_start = time.time()
 # import data
 # done in a quite wacky way!
 try:
-    data = importlib.import_module("data_" + data_set)
+    data = importlib.import_module("data." + data_set)
 except ModuleNotFoundError:
     quit(print("ERROR: data_" + data_set + ".py not found"))
 
@@ -84,8 +62,8 @@ elif import_source == "csv":
     zcoords = {}
     zone_list = []
     crossing_list = []
-    z_in = open(data_set + "_z.csv", encoding="utf-8").read().splitlines()[1:]
-    c_in = open(data_set + "_c.csv", encoding="utf-8").read().splitlines()[1:]
+    z_in = open("csv/" + data_set + "_z.csv", encoding="utf-8").read().splitlines()[1:]
+    c_in = open("csv/" + data_set + "_c.csv", encoding="utf-8").read().splitlines()[1:]
     for i, zone in enumerate(z_in + c_in):
         coords, name, _ = zone.split(",")
         lon, lat = coords[8:-2].split(" ")[:2]
@@ -109,7 +87,7 @@ elif import_source == "csv":
     for i in zcoords:
         zcoords[i] = lonlat2xy(zcoords[i][0], zcoords[i][1])
     connections = []
-    for line in open(data_set + "_con.csv").read().splitlines()[1:]:
+    for line in open("csv/" + data_set + "_con.csv").read().splitlines()[1:]:
         # points as in points (corners?) of a line
         points = line.split(", ")
         points[0] = points[0].split("(")[-1]
