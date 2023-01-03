@@ -251,14 +251,14 @@ elif has_connection: # not debug
         zone_points[zone] = int(zone_data["takeoverPoints"] + potential_hours * zone_data["pointsPerHour"])
         # if currentOwner is yourself, give revisit points if over 23 hours ago
         # give neutral points if no currentOwner
-        if "currentOwner" in zone_data and zone_data["currentOwner"]["name"] == settings.username:
-                hours_since_taken = (time.time() - str2time(zone_data["dateLastTaken"])) / 3600
-                if hours_since_taken > 23:
-                    zone_points[zone] = int(zone_data["takeoverPoints"] / 2)
-                else:
-                    zone_points[zone] = 0
-        else: # no currentOwner - gives neutral bonus instead
+        if "currentOwner" not in zone_data:
             zone_points[zone] += 50
+        elif zone_data["currentOwner"]["name"] == settings.username:
+            hours_since_taken = (time.time() - str2time(zone_data["dateLastTaken"])) / 3600
+            if hours_since_taken > 23:
+                zone_points[zone] = int(zone_data["takeoverPoints"] / 2)
+            else:
+                zone_points[zone] = 0
     for zone in crossing_list: # crossings don't give points
         zone_points[zone] = 0
     with open(settings.dumpname + ".pk", "wb") as file:
